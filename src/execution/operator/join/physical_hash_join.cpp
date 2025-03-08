@@ -21,18 +21,6 @@
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
 
-#include <sys/time.h>
-extern int debug_tag;
-extern int numa_tag;
-extern double prepare_payloads_end;
-extern double init_pointer_table_end;
-extern double build_end;
-static double getNow() {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
-}
-
 namespace duckdb {
 
 PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
@@ -364,11 +352,6 @@ public:
 
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
 		sink.hash_table->InitializePointerTable(entry_idx_from, entry_idx_to);
-
-		if (debug_tag) {
-			init_pointer_table_end = getNow();
-		}
-
 		event->FinishTask();
 		return TaskExecutionResult::TASK_FINISHED;
 	}
@@ -396,9 +379,6 @@ public:
 		auto &ht = *sink.hash_table;
 		const auto entry_count = ht.capacity;
 		auto num_threads = NumericCast<idx_t>(sink.num_threads);
-		if (pipeline->half_thread_tag) {
-			num_threads = (NumericCast<idx_t>(sink.num_threads) + 1) / 2; 
-		}
 		if (num_threads == 1 || (entry_count < PARALLEL_CONSTRUCT_THRESHOLD && !context.config.verify_parallelism)) {
 			// Single-threaded finalize
 			finalize_tasks.push_back(
@@ -419,11 +399,7 @@ public:
 				}
 			}
 		}
-		if (numa_tag) {
-			SetTasksTest(std::move(finalize_tasks), pipeline->numa_id);
-		} else {
-			SetTasks(std::move(finalize_tasks));
-		}
+		SetTasksTest(std::move(finalize_tasks), pipeline->numa_id);
 	}
 
 	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
@@ -439,10 +415,6 @@ public:
 
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
 		sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, parallel);
-
-		if (debug_tag) {
-			build_end = getNow();
-		}
 
 		event->FinishTask();
 		return TaskExecutionResult::TASK_FINISHED;
@@ -472,9 +444,6 @@ public:
 		const auto chunk_count = ht.GetDataCollection().ChunkCount();
 		// const auto num_threads = NumericCast<idx_t>(sink.num_threads);
 		auto num_threads = NumericCast<idx_t>(sink.num_threads);
-		if (pipeline->half_thread_tag) {
-			num_threads = (NumericCast<idx_t>(sink.num_threads) + 1) / 2; 
-		}
 		if (num_threads == 1 || (ht.Count() < PARALLEL_CONSTRUCT_THRESHOLD && !context.config.verify_parallelism)) {
 			// Single-threaded finalize
 			finalize_tasks.push_back(
@@ -495,11 +464,7 @@ public:
 				}
 			}
 		}
-		if (numa_tag) {
-			SetTasksTest(std::move(finalize_tasks), pipeline->numa_id);
-		} else {
-			SetTasks(std::move(finalize_tasks));
-		}
+		SetTasksTest(std::move(finalize_tasks), pipeline->numa_id);
 	}
 
 	void FinishEvent() override {
@@ -514,10 +479,6 @@ void HashJoinGlobalSinkState::ScheduleFinalize(Pipeline &pipeline, Event &event)
 	if (hash_table->Count() == 0) {
 		hash_table->finalized = true;
 		return;
-	}
-
-	if (debug_tag) {
-		prepare_payloads_end = getNow();
 	}
 
 	hash_table->AllocatePointerTable();
@@ -803,8 +764,6 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 		D_ASSERT(!sink.external);
 		return sink.perfect_join_executor->ProbePerfectHashTable(context, input, chunk, *state.perfect_hash_join_state);
 	}
-
-	double start_time = getNow();
 
 	if (sink.external && !state.initialized) {
 		// some initialization for external hash join

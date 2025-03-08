@@ -16,7 +16,9 @@
 #include <chrono>
 #include <thread>
 #endif
-extern int print_tag;
+
+bool print_tag = false;
+
 namespace duckdb {
 double getNow() {
 	struct timeval tv;

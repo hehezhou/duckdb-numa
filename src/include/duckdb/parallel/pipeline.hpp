@@ -150,7 +150,6 @@ public:
 	double total_time = 0;
 
 	idx_t numa_id;
-	bool half_thread_tag;
 
 private:
 	//! Whether or not the pipeline has been readied

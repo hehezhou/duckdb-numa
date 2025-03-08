@@ -5,12 +5,11 @@
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 
-extern int parallel_build_tag;
-extern int split_probe_tag;
-extern int split_probe_rest;
-extern int debug_tag;
-extern int numa_tag;
-extern std::atomic<int> current_build_id;
+#include "duckdb/common/numa_config.hpp"
+
+// NUMACONSTANT
+int split_probe_rest;
+int split_probe_rest_start = 4;
 
 namespace duckdb {
 
@@ -50,34 +49,16 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 	meta_pipeline.GetPipelines(pipelines_so_far, false);
 	auto &last_pipeline = *pipelines_so_far.back();
 
-	vector<shared_ptr<Pipeline>> dependencies;
-	optional_ptr<MetaPipeline> last_child_ptr;
 	if (build_rhs) {
 		// on the RHS (build side), we construct a child MetaPipeline with this operator as its sink
 		auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, op, MetaPipelineType::JOIN_BUILD);
 		child_meta_pipeline.Build(*op.children[1]);
-		if (op.children[1]->CanSaturateThreads(current.GetClientContext())) {
-			// if the build side can saturate all available threads,
-			// we don't just make the LHS pipeline depend on the RHS, but recursively all LHS children too.
-			// this prevents breadth-first plan evaluation
-			child_meta_pipeline.GetPipelines(dependencies, false);
-			last_child_ptr = meta_pipeline.GetLastChild();
-		}
 
-		if (numa_tag) {
-			auto numa_id = current.numa_id;
-			vector<shared_ptr<Pipeline>> child_pipelines;
-			child_meta_pipeline.GetPipelines(child_pipelines, true);
-			for (auto &pipeline : child_pipelines) {
-				pipeline->numa_id = numa_id;
-			}
-		}
-		if (parallel_build_tag) {
-			vector<shared_ptr<Pipeline>> child_pipelines;
-			child_meta_pipeline.GetPipelines(child_pipelines, true);
-			for (auto &pipeline : child_pipelines) {
-				pipeline->half_thread_tag = true;
-			}
+		auto numa_id = current.numa_id;
+		vector<shared_ptr<Pipeline>> child_pipelines;
+		child_meta_pipeline.GetPipelines(child_pipelines, true);
+		for (auto &pipeline : child_pipelines) {
+			pipeline->numa_id = numa_id;
 		}
 	}
 
@@ -88,19 +69,8 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 		op.children[0] = std::move(breaker);
 	}
 
-	if (split_probe_tag && numa_tag) {
-		current.half_thread_tag = true;
-	}
-
 	// continue building the current pipeline on the LHS (probe side)
 	op.children[0]->BuildPipelines(current, meta_pipeline);
-
-	if (last_child_ptr) {
-		if (!parallel_build_tag) {
-			// the pointer was set, set up the dependencies
-			meta_pipeline.AddRecursiveDependencies(dependencies, *last_child_ptr);
-		}
-	}
 
 	switch (op.type) {
 	case PhysicalOperatorType::POSITIONAL_JOIN:

@@ -1,13 +1,10 @@
 #include "duckdb/execution/operator/helper/physical_pipeline_breaker.hpp"
 
-#include "../extension/jemalloc/include/jemalloc_extension.hpp"
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/types/column/column_data_collection_segment.hpp"
-
-extern int numa_tag;
 
 namespace duckdb {
 
@@ -171,13 +168,9 @@ void PhysicalPipelineBreaker::BuildPipelines(Pipeline &current, MetaPipeline &me
 	state.SetPipelineSource(current, *this);
 
 	// we create a new pipeline starting from the child
-	if (numa_tag) {
-		auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipelineWithoutDependency(current, *this);
-		child_meta_pipeline.GetBasePipeline()->numa_id = 1;
-		child_meta_pipeline.Build(*children[0]);
-	} else {
-		auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, *this);
-		child_meta_pipeline.Build(*children[0]);
-	}
+	auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipelineWithoutDependency(current, *this);
+	child_meta_pipeline.GetBasePipeline()->numa_id = 1;
+	child_meta_pipeline.Build(*children[0]);
 }
+
 }  // namespace duckdb

@@ -18,6 +18,8 @@
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
+#include "duckdb/common/numa_config.hpp"
+
 #include <algorithm>
 #include <chrono>
 
@@ -399,6 +401,7 @@ void Executor::InitializeInternal(PhysicalOperator &plan) {
 		// build and ready the pipelines
 		PipelineBuildState state;
 		auto root_pipeline = make_shared_ptr<MetaPipeline>(*this, state, nullptr);
+		InitParams();
 		root_pipeline->Build(*physical_plan);
 		root_pipeline->Ready();
 

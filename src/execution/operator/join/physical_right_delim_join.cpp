@@ -9,12 +9,6 @@
 #include "duckdb/parallel/pipeline.hpp"
 #include "duckdb/parallel/thread_context.hpp"
 
-extern int parallel_build_tag;
-extern int split_probe_tag;
-extern int split_probe_rest;
-extern int debug_tag;
-extern int numa_tag;
-
 namespace duckdb {
 
 PhysicalRightDelimJoin::PhysicalRightDelimJoin(vector<LogicalType> types, unique_ptr<PhysicalOperator> original_join,

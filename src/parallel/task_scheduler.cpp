@@ -23,8 +23,6 @@
 #include <unistd.h>
 #endif
 
-extern int numa_tag;
-
 namespace duckdb {
 
 struct SchedulerThread {
@@ -183,7 +181,7 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker) {
 
 	auto cpu_id = GetEstimatedCPUId();
 	auto my_queue = queue.get();
-	if (numa_tag && cpu_id % 2 == 1) {
+	if (cpu_id % 2 == 1) {
 		my_queue = queue_2_test.get();
 	}
 
@@ -303,12 +301,10 @@ void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
 
 #ifndef DUCKDB_NO_THREADS
 static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker, int cpu_id) {
-	if (numa_tag) {
-		cpu_set_t cpu_mask;
-		CPU_ZERO(&cpu_mask);
-		CPU_SET(cpu_id, &cpu_mask);
-		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
-	}
+	cpu_set_t cpu_mask;
+	CPU_ZERO(&cpu_mask);
+	CPU_SET(cpu_id, &cpu_mask);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
 	scheduler->ExecuteForever(marker);
 }
 #endif
@@ -346,12 +342,8 @@ void TaskScheduler::SetAllocatorBackgroundThreads(bool enable) {
 void TaskScheduler::Signal(idx_t n) {
 #ifndef DUCKDB_NO_THREADS
 	typedef std::make_signed<std::size_t>::type ssize_t;
-	if (numa_tag) {
-		queue->semaphore.signal(NumericCast<ssize_t>(n / 2));
-		queue_2_test->semaphore.signal(NumericCast<ssize_t>((n + 1) / 2));
-	} else {
-		queue->semaphore.signal(NumericCast<ssize_t>(n));
-	}
+	queue->semaphore.signal(NumericCast<ssize_t>(n / 2));
+	queue_2_test->semaphore.signal(NumericCast<ssize_t>((n + 1) / 2));
 #endif
 }
 

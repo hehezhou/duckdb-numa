@@ -5,14 +5,6 @@
 #include "duckdb/common/types/row/tuple_data_collection.hpp"
 #include "duckdb/common/uhugeint.hpp"
 
-#include <sys/time.h>
-extern int debug_tag;
-extern double total_time;
-static double getNow() {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
-}
 namespace duckdb {
 
 using ValidityBytes = TupleDataLayout::ValidityBytes;
@@ -519,11 +511,9 @@ void TupleDataCollection::CollectionWithinCollectionComputeHeapSizes(Vector &hea
 
 template <class T>
 static void TemplatedInitializeValidityMask(const data_ptr_t row_locations[], const idx_t append_count) {
-	double tmp = getNow();
 	for (idx_t i = 0; i < append_count; i++) {
 		Store<T>(T(-1), row_locations[i]);
 	}
-	if (debug_tag) total_time += getNow() - tmp;
 }
 
 template <idx_t validity_bytes>
