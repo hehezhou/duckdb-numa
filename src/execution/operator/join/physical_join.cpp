@@ -53,15 +53,9 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 		// on the RHS (build side), we construct a child MetaPipeline with this operator as its sink
 		auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, op, MetaPipelineType::JOIN_BUILD);
 		child_meta_pipeline.Build(*op.children[1]);
-
-		auto numa_id = current.numa_id;
-		vector<shared_ptr<Pipeline>> child_pipelines;
-		child_meta_pipeline.GetPipelines(child_pipelines, true);
-		for (auto &pipeline : child_pipelines) {
-			pipeline->numa_id = numa_id;
-		}
 	}
 
+	// NUMATODO: config
 	if (--split_probe_rest == 0) {
 		auto breaker_types = op.children[0]->types;
 		auto breaker_estimated_cardinality = op.children[0]->estimated_cardinality;

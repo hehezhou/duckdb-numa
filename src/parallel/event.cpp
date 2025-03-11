@@ -82,14 +82,14 @@ void Event::SetTasks(vector<shared_ptr<Task>> tasks) {
 	}
 }
 
-void Event::SetTasksTest(vector<shared_ptr<Task>> tasks, int numa_id) {
+void Event::SetTasksNUMA(vector<shared_ptr<Task>> tasks, int numa_id) {
 	auto &ts = TaskScheduler::GetScheduler(executor.context);
 	std::cerr << "Test " << numa_id << std::endl;
 	D_ASSERT(total_tasks == 0);
 	D_ASSERT(!tasks.empty());
 	this->total_tasks = tasks.size();
 	for (auto &task : tasks) {
-		ts.ScheduleTaskTest(executor.GetTokenTest(numa_id), std::move(task), numa_id);
+		ts.ScheduleTaskNUMA(executor.GetToken(), std::move(task), numa_id);
 	}
 }
 

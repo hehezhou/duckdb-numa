@@ -104,6 +104,7 @@ MetaPipeline &MetaPipeline::CreateChildMetaPipeline(Pipeline &current, PhysicalO
 	child_meta_pipeline.parent = &current;
 	// child MetaPipeline must finish completely before this MetaPipeline can start
 	current.AddDependency(child_meta_pipeline.GetBasePipeline());
+	child_meta_pipeline.GetBasePipeline()->numa_id = current.numa_id;
 	// child meta pipeline is part of the recursive CTE too
 	child_meta_pipeline.recursive_cte = recursive_cte;
 	return child_meta_pipeline;

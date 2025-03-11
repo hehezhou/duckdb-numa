@@ -399,7 +399,7 @@ public:
 				}
 			}
 		}
-		SetTasksTest(std::move(finalize_tasks), pipeline->numa_id);
+		SetTasksNUMA(std::move(finalize_tasks), pipeline->numa_id);
 	}
 
 	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
@@ -464,7 +464,7 @@ public:
 				}
 			}
 		}
-		SetTasksTest(std::move(finalize_tasks), pipeline->numa_id);
+		SetTasksNUMA(std::move(finalize_tasks), pipeline->numa_id);
 	}
 
 	void FinishEvent() override {

@@ -46,18 +46,14 @@ public:
 	DUCKDB_API static TaskScheduler &GetScheduler(DatabaseInstance &db);
 
 	unique_ptr<ProducerToken> CreateProducer();
-
-	unique_ptr<ProducerToken> CreateProducerTest();
 	//! Schedule a task to be executed by the task scheduler
 	void ScheduleTask(ProducerToken &producer, shared_ptr<Task> task);
 
-	void ScheduleTaskTest(ProducerToken &producer, shared_ptr<Task> task, int numa_id);
+	void ScheduleTaskNUMA(ProducerToken &producer, shared_ptr<Task> task, int numa_id);
 	//! Fetches a task from a specific producer, returns true if successful or false if no tasks were available
 	bool GetTaskFromProducer(ProducerToken &token, shared_ptr<Task> &task);
-
-	bool GetTaskFromProducerTest(ProducerToken &token, shared_ptr<Task> &task);
 	//! Run tasks forever until "marker" is set to false, "marker" must remain valid until the thread is joined
-	void ExecuteForever(atomic<bool> *marker);
+	void ExecuteForever(atomic<bool> *marker, idx_t cpu_id = 0);
 	//! Run tasks until `marker` is set to false, `max_tasks` have been completed, or until there are no more tasks
 	//! available. Returns the number of tasks that were completed.
 	idx_t ExecuteTasks(atomic<bool> *marker, idx_t max_tasks);
@@ -97,8 +93,6 @@ private:
 	DatabaseInstance &db;
 	//! The task queue
 	unique_ptr<ConcurrentQueue> queue;
-
-	unique_ptr<ConcurrentQueue> queue_2_test;
 	//! Lock for modifying the thread count
 	mutex thread_lock;
 	//! The active background threads of the task scheduler

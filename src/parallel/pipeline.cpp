@@ -180,7 +180,7 @@ bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
 	for (idx_t i = 0; i < max_threads; i++) {
 		tasks.push_back(make_uniq<PipelineTask>(*this, event));
 	}
-	event->SetTasksTest(std::move(tasks), numa_id);
+	event->SetTasksNUMA(std::move(tasks), numa_id);
 	return true;
 }
 
