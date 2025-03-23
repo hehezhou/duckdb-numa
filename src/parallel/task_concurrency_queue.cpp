@@ -28,10 +28,7 @@ bool ConcurrentQueue::TryFill(idx_t numa_id) {
     if (current_task_numa[numa_id] == nullptr && !q_numa[numa_id].empty()) {
         auto task = q_numa[numa_id].front();
         q_numa[numa_id].pop();
-        auto [count_0, count_1] = task->Register(this);
-        current_task_numa[numa_id].store(task, std::memory_order::memory_order_relaxed);
-        semaphore[0].signal(count_0);
-        semaphore[1].signal(count_1);
+        task->Register(this);
         return true;
     }
     return false;

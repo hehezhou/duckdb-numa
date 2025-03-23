@@ -24,8 +24,9 @@ public:
 public:
 	TaskNUMA(idx_t numa_id, bool stealable, bool is_final_task, bool dynamic_source, bool breaker_source)
 		: numa_id(numa_id), stealable(stealable), is_final_task(is_final_task), dynamic_source(dynamic_source) {
-        if (breaker_source) {
+        if (!breaker_source) {
             rest_inputs = UINT64_MAX;
+            input_finished = true;
         } else {
             rest_inputs = total_inputs = 0;
         }
@@ -36,7 +37,7 @@ public:
 public:
 	virtual TaskExecutionResult Execute(TaskExecutionMode mode, idx_t cpu_id) = 0;
 
-    std::tuple<idx_t, idx_t> Register(ConcurrentQueue *queue);
+    void Register(ConcurrentQueue *queue);
 
 	void AddInput(idx_t count);
 
@@ -49,11 +50,12 @@ public:
     bool TrySteal();
 
 private:
-	ConcurrentQueue *schedule_queue{nullptr};
+	std::atomic<ConcurrentQueue*> schedule_queue{nullptr};
 
 	std::atomic<idx_t> rest_inputs;
 	std::atomic<idx_t> total_inputs;
 	std::atomic<bool> finished{false};
+	std::atomic<bool> input_finished{false};
 };
 
 }
