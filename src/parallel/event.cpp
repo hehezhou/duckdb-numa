@@ -2,7 +2,9 @@
 #include "duckdb/common/assert.hpp"
 #include "duckdb/common/exception.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
+#include "duckdb/parallel/task_numa.hpp"
 #include "duckdb/execution/executor.hpp"
+
 
 namespace duckdb {
 
@@ -82,15 +84,12 @@ void Event::SetTasks(vector<shared_ptr<Task>> tasks) {
 	}
 }
 
-void Event::SetTasksNUMA(vector<shared_ptr<Task>> tasks, int numa_id) {
+void Event::SetTaskNUMA(TaskNUMA *task_numa) {
 	auto &ts = TaskScheduler::GetScheduler(executor.context);
-	std::cerr << "Test " << numa_id << std::endl;
+	std::cerr << "Test " << task_numa->numa_id << std::endl;
 	D_ASSERT(total_tasks == 0);
-	D_ASSERT(!tasks.empty());
-	this->total_tasks = tasks.size();
-	for (auto &task : tasks) {
-		ts.ScheduleTaskNUMA(executor.GetToken(), std::move(task), numa_id);
-	}
+	this->total_tasks = 1;
+	ts.ScheduleTaskNUMA(executor.GetToken(), task_numa);
 }
 
 } // namespace duckdb

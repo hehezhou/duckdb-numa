@@ -454,16 +454,7 @@ void Executor::CancelTasks() {
 }
 
 void Executor::WorkOnTasks() {
-	auto &scheduler = TaskScheduler::GetScheduler(context);
-
-	shared_ptr<Task> task_from_producer;
-	while (scheduler.GetTaskFromProducer(*producer, task_from_producer)) {
-		auto res = task_from_producer->Execute(TaskExecutionMode::PROCESS_ALL);
-		if (res == TaskExecutionResult::TASK_BLOCKED) {
-			task_from_producer->Deschedule();
-		}
-		task_from_producer.reset();
-	}
+	throw NotImplementedException("Disallowed in Research");
 }
 
 void Executor::SignalTaskRescheduled(lock_guard<mutex> &) {

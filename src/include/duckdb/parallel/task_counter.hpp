@@ -28,13 +28,7 @@ public:
 	}
 
 	virtual void Finish() {
-		while (tasks_completed < task_count) {
-			shared_ptr<Task> task;
-			if (scheduler.GetTaskFromProducer(*token, task)) {
-				task->Execute();
-				task.reset();
-			}
-		}
+		throw NotImplementedException("Disallowed in Research");
 	}
 
 private:

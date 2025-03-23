@@ -15,6 +15,7 @@
 namespace duckdb {
 class Executor;
 class Task;
+class TaskNUMA;
 
 class Event : public enable_shared_from_this<Event> {
 public:
@@ -43,7 +44,7 @@ public:
 
 	void SetTasks(vector<shared_ptr<Task>> tasks);
 
-	void SetTasksNUMA(vector<shared_ptr<Task>> tasks, int numa_id);
+	void SetTaskNUMA(TaskNUMA *task_numa);
 
 	void InsertEvent(shared_ptr<Event> replacement_event);
 

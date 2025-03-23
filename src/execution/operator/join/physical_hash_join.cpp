@@ -399,7 +399,8 @@ public:
 				}
 			}
 		}
-		SetTasksNUMA(std::move(finalize_tasks), pipeline->numa_id);
+		// SetTaskNUMA(std::move(finalize_tasks), pipeline->numa_id);
+		SetTasks(std::move(finalize_tasks));
 	}
 
 	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
@@ -464,7 +465,8 @@ public:
 				}
 			}
 		}
-		SetTasksNUMA(std::move(finalize_tasks), pipeline->numa_id);
+		// SetTaskNUMA(std::move(finalize_tasks), pipeline->numa_id);
+		SetTasks(std::move(finalize_tasks));
 	}
 
 	void FinishEvent() override {

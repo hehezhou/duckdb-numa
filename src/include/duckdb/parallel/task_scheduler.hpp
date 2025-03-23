@@ -12,26 +12,16 @@
 #include "duckdb/common/common.hpp"
 #include "duckdb/common/mutex.hpp"
 #include "duckdb/common/vector.hpp"
-#include "duckdb/parallel/task.hpp"
 
 namespace duckdb {
 
+class ProducerToken;
 struct ConcurrentQueue;
-struct QueueProducerToken;
 class ClientContext;
 class DatabaseInstance;
-class TaskScheduler;
-
+class Task;
+class TaskNUMA;
 struct SchedulerThread;
-
-struct ProducerToken {
-	ProducerToken(TaskScheduler &scheduler, unique_ptr<QueueProducerToken> token);
-	~ProducerToken();
-
-	TaskScheduler &scheduler;
-	unique_ptr<QueueProducerToken> token;
-	mutex producer_lock;
-};
 
 //! The TaskScheduler is responsible for managing tasks and threads
 class TaskScheduler {
@@ -49,7 +39,7 @@ public:
 	//! Schedule a task to be executed by the task scheduler
 	void ScheduleTask(ProducerToken &producer, shared_ptr<Task> task);
 
-	void ScheduleTaskNUMA(ProducerToken &producer, shared_ptr<Task> task, int numa_id);
+	void ScheduleTaskNUMA(ProducerToken &producer, TaskNUMA *task);
 	//! Fetches a task from a specific producer, returns true if successful or false if no tasks were available
 	bool GetTaskFromProducer(ProducerToken &token, shared_ptr<Task> &task);
 	//! Run tasks forever until "marker" is set to false, "marker" must remain valid until the thread is joined
