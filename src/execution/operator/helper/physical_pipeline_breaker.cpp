@@ -44,7 +44,7 @@ private:
 	vector<column_t> column_ids;
 };
 
-void ConcurrentQueue::Enqueue(ChunkReference &&chunk_ref) {
+void ConcurrentChunkQueue::Enqueue(ChunkReference &&chunk_ref) {
 	if (q.enqueue(std::move(chunk_ref))) {
 		semaphore.signal();
 	} else {
@@ -52,19 +52,19 @@ void ConcurrentQueue::Enqueue(ChunkReference &&chunk_ref) {
 	}
 }
 
-bool ConcurrentQueue::TryDequeue(ChunkReference &chunk_ref) {
+bool ConcurrentChunkQueue::TryDequeue(ChunkReference &chunk_ref) {
 	semaphore.wait();
 	return q.try_dequeue(chunk_ref);
 }
 
-void ConcurrentQueue::Finalize() {
+void ConcurrentChunkQueue::Finalize() {
 	semaphore.signal(96);
 }
 
 PhysicalPipelineBreaker::PhysicalPipelineBreaker(vector<LogicalType> types, unique_ptr<PhysicalOperator> child_operator,
                                                  idx_t estimated_cardinality)
     : PhysicalOperator(PhysicalOperatorType::PIPELINE_BREAKER, std::move(types), estimated_cardinality),
-	  chunk_queue(make_uniq<ConcurrentQueue>()) {
+	  chunk_queue(make_uniq<ConcurrentChunkQueue>()) {
 	children.push_back(std::move(child_operator));
 }
 

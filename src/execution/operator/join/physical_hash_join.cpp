@@ -9,6 +9,8 @@
 #include "duckdb/main/query_profiler.hpp"
 #include "duckdb/parallel/base_pipeline_event.hpp"
 #include "duckdb/parallel/executor_task.hpp"
+#include "duckdb/parallel/task_numa.hpp"
+#include "duckdb/parallel/task_concurrency_queue.hpp"
 #include "duckdb/parallel/interrupt.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 #include "duckdb/parallel/thread_context.hpp"
@@ -342,26 +344,39 @@ void PhysicalHashJoin::PrepareFinalize(ClientContext &context, GlobalSinkState &
 	gstate.temporary_memory_state->SetRemainingSize(gstate.total_size);
 }
 
-class HashJoinTableInitTask : public ExecutorTask {
+class HashJoinTableInitTaskNUMA : public TaskNUMA {
 public:
-	HashJoinTableInitTask(shared_ptr<Event> event_p, ClientContext &context, HashJoinGlobalSinkState &sink_p,
-	                      idx_t entry_idx_from_p, idx_t entry_idx_to_p, const PhysicalOperator &op_p)
-	    : ExecutorTask(context, std::move(event_p), op_p), sink(sink_p), entry_idx_from(entry_idx_from_p),
-	      entry_idx_to(entry_idx_to_p) {
+	HashJoinTableInitTaskNUMA(shared_ptr<Event> event_p, HashJoinGlobalSinkState &sink_p,
+							  vector<std::tuple<idx_t, idx_t>> tasks, idx_t numa_id)
+	    : TaskNUMA(event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {}
+
+	void RegisterInternal() {
+		schedule_queue.load(std::memory_order_relaxed)->semaphore[0].signal(tasks.size());
+		schedule_queue.load(std::memory_order_relaxed)->semaphore[1].signal(tasks.size());
 	}
 
-	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
-		sink.hash_table->InitializePointerTable(entry_idx_from, entry_idx_to);
-		event->FinishTask();
-		return TaskExecutionResult::TASK_FINISHED;
+	TaskExecutionResult Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) override {
+		do {
+			idx_t task_id = next_task.fetch_add(1, std::memory_order_relaxed);
+			if (task_id >= tasks.size()) {
+				return TaskExecutionResult::TASK_FINISHED;
+			}
+			auto [entry_idx_from, entry_idx_to] = tasks[task_id];
+			sink.hash_table->InitializePointerTable(entry_idx_from, entry_idx_to);
+			if (finished_task.fetch_add(1, std::memory_order_acquire) + 1 == tasks.size()) {
+				Finish();
+				return TaskExecutionResult::TASK_FINISHED;
+			}
+		} while (mode == TaskNUMAExecutionMode::PROCESS_LOCAL);
+		return TaskExecutionResult::TASK_NOT_FINISHED;
 	}
 
 private:
 	HashJoinGlobalSinkState &sink;
-	idx_t entry_idx_from;
-	idx_t entry_idx_to;
+	vector<std::tuple<idx_t, idx_t>> tasks;
+	std::atomic<idx_t> next_task{0};
+	std::atomic<idx_t> finished_task{0};
 };
-
 
 class HashJoinTableInitEvent : public BasePipelineEvent {
 public:
@@ -375,14 +390,13 @@ public:
 	void Schedule() override {
 		auto &context = pipeline->GetClientContext();
 
-		vector<shared_ptr<Task>> finalize_tasks;
+		vector<std::tuple<idx_t, idx_t>> init_tasks;
 		auto &ht = *sink.hash_table;
 		const auto entry_count = ht.capacity;
 		auto num_threads = NumericCast<idx_t>(sink.num_threads);
 		if (num_threads == 1 || (entry_count < PARALLEL_CONSTRUCT_THRESHOLD && !context.config.verify_parallelism)) {
 			// Single-threaded finalize
-			finalize_tasks.push_back(
-			    make_uniq<HashJoinTableInitTask>(shared_from_this(), context, sink, 0U, entry_count, sink.op));
+			init_tasks.emplace_back(0U, entry_count);
 		} else {
 			// Parallel finalize
 			auto entries_per_thread = MaxValue<idx_t>((entry_count + num_threads - 1) / num_threads, 1);
@@ -391,41 +405,51 @@ public:
 			for (idx_t thread_idx = 0; thread_idx < num_threads; thread_idx++) {
 				auto entry_idx_from = entry_idx;
 				auto entry_idx_to = MinValue<idx_t>(entry_idx_from + entries_per_thread, entry_count);
-				finalize_tasks.push_back(make_uniq<HashJoinTableInitTask>(shared_from_this(), context, sink,
-				                                                          entry_idx_from, entry_idx_to, sink.op));
+				init_tasks.emplace_back(entry_idx_from, entry_idx_to);
 				entry_idx = entry_idx_to;
 				if (entry_idx == entry_count) {
 					break;
 				}
 			}
 		}
-		// SetTaskNUMA(std::move(finalize_tasks), pipeline->numa_id);
-		SetTasks(std::move(finalize_tasks));
+		SetTaskNUMA(new HashJoinTableInitTaskNUMA(shared_from_this(), sink, std::move(init_tasks), pipeline->numa_id));
 	}
 
 	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
 };
 
-class HashJoinFinalizeTask : public ExecutorTask {
+class HashJoinFinalizeTaskNUMA : public TaskNUMA {
 public:
-	HashJoinFinalizeTask(shared_ptr<Event> event_p, ClientContext &context, HashJoinGlobalSinkState &sink_p,
-	                     idx_t chunk_idx_from_p, idx_t chunk_idx_to_p, bool parallel_p, const PhysicalOperator &op_p)
-	    : ExecutorTask(context, std::move(event_p), op_p), sink(sink_p), chunk_idx_from(chunk_idx_from_p),
-	      chunk_idx_to(chunk_idx_to_p), parallel(parallel_p) {
+	HashJoinFinalizeTaskNUMA(shared_ptr<Event> event_p, HashJoinGlobalSinkState &sink_p,
+							  vector<std::tuple<idx_t, idx_t>> tasks, idx_t numa_id)
+	    : TaskNUMA(event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {}
+
+	void RegisterInternal() {
+		schedule_queue.load(std::memory_order_relaxed)->semaphore[0].signal(tasks.size());
+		schedule_queue.load(std::memory_order_relaxed)->semaphore[1].signal(tasks.size());
 	}
 
-	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
-		sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, parallel);
-
-		event->FinishTask();
-		return TaskExecutionResult::TASK_FINISHED;
+	TaskExecutionResult Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) override {
+		do {
+			idx_t task_id = next_task.fetch_add(1, std::memory_order_relaxed);
+			if (task_id >= tasks.size()) {
+				return TaskExecutionResult::TASK_FINISHED;
+			}
+			auto [chunk_idx_from, chunk_idx_to] = tasks[task_id];
+			sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, true);
+			if (finished_task.fetch_add(1, std::memory_order_acquire) + 1 == tasks.size()) {
+				Finish();
+				return TaskExecutionResult::TASK_FINISHED;
+			}
+		} while (mode == TaskNUMAExecutionMode::PROCESS_LOCAL);
+		return TaskExecutionResult::TASK_NOT_FINISHED;
 	}
 
 private:
 	HashJoinGlobalSinkState &sink;
-	idx_t chunk_idx_from;
-	idx_t chunk_idx_to;
-	bool parallel;
+	vector<std::tuple<idx_t, idx_t>> tasks;
+	std::atomic<idx_t> next_task{0};
+	std::atomic<idx_t> finished_task{0};
 };
 
 class HashJoinFinalizeEvent : public BasePipelineEvent {
@@ -440,15 +464,14 @@ public:
 	void Schedule() override {
 		auto &context = pipeline->GetClientContext();
 
-		vector<shared_ptr<Task>> finalize_tasks;
+		vector<std::tuple<idx_t, idx_t>> finalize_tasks;
 		auto &ht = *sink.hash_table;
 		const auto chunk_count = ht.GetDataCollection().ChunkCount();
 		// const auto num_threads = NumericCast<idx_t>(sink.num_threads);
 		auto num_threads = NumericCast<idx_t>(sink.num_threads);
 		if (num_threads == 1 || (ht.Count() < PARALLEL_CONSTRUCT_THRESHOLD && !context.config.verify_parallelism)) {
 			// Single-threaded finalize
-			finalize_tasks.push_back(
-			    make_uniq<HashJoinFinalizeTask>(shared_from_this(), context, sink, 0U, chunk_count, false, sink.op));
+			finalize_tasks.emplace_back(0U, chunk_count);
 		} else {
 			// Parallel finalize
 			auto chunks_per_thread = MaxValue<idx_t>((chunk_count + num_threads - 1) / num_threads, 1);
@@ -457,16 +480,14 @@ public:
 			for (idx_t thread_idx = 0; thread_idx < num_threads; thread_idx++) {
 				auto chunk_idx_from = chunk_idx;
 				auto chunk_idx_to = MinValue<idx_t>(chunk_idx_from + chunks_per_thread, chunk_count);
-				finalize_tasks.push_back(make_uniq<HashJoinFinalizeTask>(shared_from_this(), context, sink,
-				                                                         chunk_idx_from, chunk_idx_to, true, sink.op));
+				finalize_tasks.emplace_back(chunk_idx_from, chunk_idx_to);
 				chunk_idx = chunk_idx_to;
 				if (chunk_idx == chunk_count) {
 					break;
 				}
 			}
 		}
-		// SetTaskNUMA(std::move(finalize_tasks), pipeline->numa_id);
-		SetTasks(std::move(finalize_tasks));
+		SetTaskNUMA(new HashJoinFinalizeTaskNUMA(shared_from_this(), sink, std::move(finalize_tasks), pipeline->numa_id));
 	}
 
 	void FinishEvent() override {

@@ -27,17 +27,17 @@ struct ChunkReference {
 	ChunkMetaData chunk_meta;
 };
 
-typedef duckdb_moodycamel::ConcurrentQueue<ChunkReference> concurrent_queue_t;
+typedef duckdb_moodycamel::ConcurrentQueue<ChunkReference> concurrent_chunk_queue_t;
 typedef duckdb_moodycamel::LightweightSemaphore lightweight_semaphore_t;
 
-struct ConcurrentQueue {
+struct ConcurrentChunkQueue {
 public:
 	void Enqueue(ChunkReference &&chunk_ref);
 	bool TryDequeue(ChunkReference &chunk_ref);
 	void Finalize();
 
 private:
-	concurrent_queue_t q;
+	concurrent_chunk_queue_t q;
 	lightweight_semaphore_t semaphore;
 };
 
@@ -85,6 +85,6 @@ public:
 	void BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) override;
 
 private:
-	unique_ptr<ConcurrentQueue> chunk_queue;
+	unique_ptr<ConcurrentChunkQueue> chunk_queue;
 };
 }  // namespace duckdb

@@ -7,6 +7,7 @@
 #include "duckdb/main/database.hpp"
 #include "duckdb/common/thread.hpp"
 #include "duckdb/parallel/task_concurrency_queue.hpp"
+#include "duckdb/parallel/task_numa.hpp"
 
 #include <thread>
 
@@ -80,19 +81,21 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 	// loop until the marker is set to false
 	while (*marker) {
 		if (auto execute_type = queue->Dequeue(task, task_numa, cpu_id); execute_type != NO_TASK) {
-			auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
+			if (execute_type == TASK_NORMAL) {
+				auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
 
-			switch (execute_result) {
-			case TaskExecutionResult::TASK_FINISHED:
-			case TaskExecutionResult::TASK_ERROR:
-				task.reset();
-				break;
-			case TaskExecutionResult::TASK_NOT_FINISHED:
-				throw InternalException("Task should not return TASK_NOT_FINISHED in PROCESS_ALL mode");
-			case TaskExecutionResult::TASK_BLOCKED:
-				task->Deschedule();
-				task.reset();
-				break;
+				switch (execute_result) {
+				case TaskExecutionResult::TASK_FINISHED:
+				case TaskExecutionResult::TASK_ERROR:
+					task.reset();
+					break;
+				default:
+					throw NotImplementedException("Disallowed in Research");
+				}
+			} else if (execute_type == TASK_NUMA_LOCAL) {
+				task_numa->Execute(TaskNUMAExecutionMode::PROCESS_LOCAL, cpu_id);
+			} else if (execute_type == TASK_NUMA_STEAL) {
+				task_numa->Execute(TaskNUMAExecutionMode::PROCESS_STEAL, cpu_id);
 			}
 		}
 	}

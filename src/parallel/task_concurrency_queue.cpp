@@ -41,7 +41,7 @@ DequeueResult ConcurrentQueue::Dequeue(shared_ptr<Task> &task, TaskNUMA* &task_n
         return TASK_NORMAL;
     }
     task_numa = current_task_numa[numa_id].load(std::memory_order::memory_order_relaxed);
-    if (task_numa != nullptr && task_numa->TryFetch()) {
+    if (task_numa != nullptr) {
         return TASK_NUMA_LOCAL;
     }
     return NO_TASK;
