@@ -86,7 +86,7 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 			if (active_tasks_expect & PREPARE_FINISH) {
 				return TaskExecutionResult::TASK_FINISHED;
 			}
-		} while (active_tasks.compare_exchange_weak(active_tasks_expect, active_tasks_expect + 1, std::memory_order_relaxed));
+		} while (!active_tasks.compare_exchange_weak(active_tasks_expect, active_tasks_expect + 1, std::memory_order_relaxed));
 		executor_ptr = new PipelineExecutor(pipeline.GetClientContext(), pipeline);
 	} else {
 		if (!executors[cpu_id].compare_exchange_strong(executor_ptr, nullptr, std::memory_order_relaxed)) {
@@ -111,8 +111,8 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 	}
 
 	if (!finish_tag) {
-		executors[cpu_id].store(executor_ptr, std::memory_order_release);
-		if (active_tasks.load(std::memory_order_release) & PREPARE_FINISH) {
+		executors[cpu_id].store(executor_ptr, std::memory_order_acquire);
+		if (active_tasks.load(std::memory_order_acquire) & PREPARE_FINISH) {
 			while (!executors[cpu_id].compare_exchange_weak(executor_ptr, nullptr, std::memory_order_relaxed));
 		} else {
 			return TaskExecutionResult::TASK_NOT_FINISHED;
@@ -120,13 +120,16 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 	}
 
 	if (finish_tag) {
-		active_tasks.fetch_or(PREPARE_FINISH, std::memory_order_release);
+		active_tasks.fetch_or(PREPARE_FINISH, std::memory_order_acquire);
 	}
 
 	if (!finish_tag) {
 		FinishExecutor(executor_ptr);
 	} else {
-		auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_relaxed) - 1;
+		auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_release) - 1;
+		if (rest_tasks < PREPARE_FINISH) {
+			throw InternalException("???");
+		}
 		if (rest_tasks == PREPARE_FINISH) {
 			Finish();
 		}
@@ -152,7 +155,10 @@ void PipelineTaskNUMA::FinishExecutor(PipelineExecutor *executor) {
 		throw InternalException("Disabled in project");
 	}
 	delete executor;
-	auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_relaxed) - 1;
+	auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_release) - 1;
+	if (rest_tasks < PREPARE_FINISH) {
+		throw InternalException("???");
+	}
 	if (rest_tasks == PREPARE_FINISH) {
 		Finish();
 	}

@@ -46,7 +46,6 @@ public:
 };
 
 class PipelineTaskNUMA : public TaskNUMA {
-	static constexpr const idx_t PARTIAL_CHUNK_COUNT = 50;
 	static constexpr const idx_t PREPARE_FINISH = 1ull << 63;
 
 public:
