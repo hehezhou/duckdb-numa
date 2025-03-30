@@ -18,8 +18,7 @@ public:
 	const bool is_final_task;
 
 public:
-	TaskNUMA(shared_ptr<Event> event, idx_t numa_id, bool is_final_task)
-		: event(std::move(event)), numa_id(numa_id), is_final_task(is_final_task) {}
+	TaskNUMA(Executor &executor, shared_ptr<Event> event, idx_t numa_id, bool is_final_task);
 
 	virtual ~TaskNUMA();
 
@@ -36,6 +35,7 @@ protected:
 	std::atomic<ConcurrentQueue*> schedule_queue{nullptr};
 
 private:
+	Executor &executor;
 	shared_ptr<Event> event;
 	std::atomic<bool> finished{false};
 };

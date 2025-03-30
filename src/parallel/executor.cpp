@@ -454,7 +454,7 @@ void Executor::CancelTasks() {
 }
 
 void Executor::WorkOnTasks() {
-	throw NotImplementedException("Disallowed in Research");
+	throw NotImplementedException("Disallowed in Research Executor::WorkOnTasks");
 }
 
 void Executor::SignalTaskRescheduled(lock_guard<mutex> &) {

@@ -12,6 +12,7 @@
 #include "duckdb/parallel/pipeline_event.hpp"
 #include "duckdb/parallel/pipeline_executor.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
+#include "duckdb/parallel/task_concurrency_queue.hpp"
 
 namespace duckdb {
 
@@ -62,6 +63,99 @@ TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 	event->FinishTask();
 	pipeline_executor.reset();
 	return TaskExecutionResult::TASK_FINISHED;
+}
+
+PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task)
+	: TaskNUMA(pipeline_p.executor, std::move(event_p), numa_id, is_final_task), pipeline(pipeline_p) {
+	for (auto &i : executors) {
+		i.store(nullptr, std::memory_order_relaxed);
+	}
+}
+
+void PipelineTaskNUMA::RegisterInternal() {
+	auto queue = schedule_queue.load(std::memory_order_relaxed);
+	queue->semaphore[0].signal(thread_count / 2);
+	queue->semaphore[1].signal(thread_count / 2);
+}
+
+TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) {
+	auto executor_ptr = executors[cpu_id].load(std::memory_order_relaxed);
+	if (executor_ptr == nullptr) {
+		auto active_tasks_expect = active_tasks.load(std::memory_order_relaxed);
+		do {
+			if (active_tasks_expect & PREPARE_FINISH) {
+				return TaskExecutionResult::TASK_FINISHED;
+			}
+		} while (active_tasks.compare_exchange_weak(active_tasks_expect, active_tasks_expect + 1, std::memory_order_relaxed));
+		executor_ptr = new PipelineExecutor(pipeline.GetClientContext(), pipeline);
+	} else {
+		if (!executors[cpu_id].compare_exchange_strong(executor_ptr, nullptr, std::memory_order_relaxed)) {
+			return TaskExecutionResult::TASK_FINISHED;
+		}
+	}
+
+	bool finish_tag = false;
+	switch (mode) {
+	case TaskNUMAExecutionMode::PROCESS_LOCAL: {
+		auto result = executor_ptr->Execute();
+		if (result == PipelineExecuteResult::FINISHED) {
+			delete executor_ptr;
+			finish_tag = true;
+		} else {
+			throw InternalException("Disallowed in Research PipelineTaskNUMA::Execute");
+		}
+		break;
+	}
+	default:
+		throw InternalException("PipelineTaskNUMA: wrong numa execute mode");
+	}
+
+	if (!finish_tag) {
+		executors[cpu_id].store(executor_ptr, std::memory_order_release);
+		if (active_tasks.load(std::memory_order_release) & PREPARE_FINISH) {
+			while (!executors[cpu_id].compare_exchange_weak(executor_ptr, nullptr, std::memory_order_relaxed));
+		} else {
+			return TaskExecutionResult::TASK_NOT_FINISHED;
+		}
+	}
+
+	if (finish_tag) {
+		active_tasks.fetch_or(PREPARE_FINISH, std::memory_order_release);
+	}
+
+	if (!finish_tag) {
+		FinishExecutor(executor_ptr);
+	} else {
+		auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_relaxed) - 1;
+		if (rest_tasks == PREPARE_FINISH) {
+			Finish();
+		}
+	}
+	while (true) {
+		auto finish_ptr_local = finish_ptr.fetch_add(1, std::memory_order_relaxed);
+		if (finish_ptr_local >= thread_count) {
+			break;
+		}
+		executor_ptr = executors[finish_ptr_local].load(std::memory_order_relaxed);
+		while (executor_ptr != nullptr && !executors[finish_ptr_local].compare_exchange_weak(executor_ptr, nullptr, std::memory_order_relaxed));
+		FinishExecutor(executor_ptr);
+	}
+	return TaskExecutionResult::TASK_FINISHED;
+}
+
+void PipelineTaskNUMA::FinishExecutor(PipelineExecutor *executor) {
+	if (executor == nullptr) {
+		return;
+	}
+	auto result = executor->Execute();
+	if (result != PipelineExecuteResult::FINISHED) {
+		throw InternalException("Disabled in project");
+	}
+	delete executor;
+	auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_relaxed) - 1;
+	if (rest_tasks == PREPARE_FINISH) {
+		Finish();
+	}
 }
 
 Pipeline::Pipeline(Executor &executor_p)
@@ -176,12 +270,14 @@ bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
 	}
 
 	// launch a task for every thread
-	vector<shared_ptr<Task>> tasks;
-	for (idx_t i = 0; i < max_threads; i++) {
-		tasks.push_back(make_uniq<PipelineTask>(*this, event));
-	}
-	// event->SetTaskNUMA(std::move(tasks), numa_id);
-	event->SetTasks(std::move(tasks));
+
+	// vector<shared_ptr<Task>> tasks;
+	// for (idx_t i = 0; i < max_threads; i++) {
+	// 	tasks.push_back(make_uniq<PipelineTask>(*this, event));
+	// }
+	// event->SetTasks(std::move(tasks));
+	
+	event->SetTaskNUMA(new PipelineTaskNUMA(*this, event, numa_id, false));
 	return true;
 }
 

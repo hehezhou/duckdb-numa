@@ -28,7 +28,7 @@ public:
 	}
 
 	virtual void Finish() {
-		throw NotImplementedException("Disallowed in Research");
+		throw NotImplementedException("Disallowed in Research TaskCounter::Finish");
 	}
 
 private:

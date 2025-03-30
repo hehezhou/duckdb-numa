@@ -34,11 +34,11 @@ void TaskExecutor::FinishTask() {
 }
 
 void TaskExecutor::WorkOnTasks() {
-	throw NotImplementedException("Disallowed in Research");
+	throw NotImplementedException("Disallowed in Research TaskExecutor::WorkOnTasks");
 }
 
 bool TaskExecutor::GetTask(shared_ptr<Task> &task) {
-	throw NotImplementedException("Disallowed in Research");
+	throw NotImplementedException("Disallowed in Research TaskExecutor::GetTask");
 }
 
 BaseExecutorTask::BaseExecutorTask(TaskExecutor &executor) : executor(executor) {

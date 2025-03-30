@@ -12,8 +12,10 @@
 #include "duckdb/common/reference_map.hpp"
 #include "duckdb/common/set.hpp"
 #include "duckdb/common/unordered_set.hpp"
+#include "duckdb/common/numa_config.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/table_function.hpp"
+#include "duckdb/parallel/task_numa.hpp"
 #include "duckdb/parallel/executor_task.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 #include "duckdb/storage/table/row_group_collection.hpp"
@@ -41,6 +43,30 @@ public:
 
 public:
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override;
+};
+
+class PipelineTaskNUMA : public TaskNUMA {
+	static constexpr const idx_t PARTIAL_CHUNK_COUNT = 50;
+	static constexpr const idx_t PREPARE_FINISH = 1ull << 63;
+
+public:
+	explicit PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task);
+	~PipelineTaskNUMA() {}
+
+	Pipeline &pipeline;
+
+public:
+	TaskExecutionResult Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) override;
+
+	void RegisterInternal() override;
+
+private:
+	void FinishExecutor(PipelineExecutor *executor);
+
+private:
+	std::atomic<PipelineExecutor*> executors[thread_count];
+	std::atomic<idx_t> active_tasks{0};
+	std::atomic<idx_t> finish_ptr{0};
 };
 
 class PipelineBuildState {

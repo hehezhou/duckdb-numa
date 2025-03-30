@@ -1,8 +1,14 @@
 #include "duckdb/parallel/task_numa.hpp"
+#include "duckdb/execution/executor.hpp"
 #include "duckdb/parallel/event.hpp"
 #include "duckdb/parallel/task_concurrency_queue.hpp"
 
 namespace duckdb {
+
+TaskNUMA::TaskNUMA(Executor &executor, shared_ptr<Event> event, idx_t numa_id, bool is_final_task)
+	: event(std::move(event)), numa_id(numa_id), is_final_task(is_final_task), executor(executor) {
+    executor.RegisterTask();
+}
 
 TaskNUMA::~TaskNUMA() {}
 
@@ -26,6 +32,7 @@ void TaskNUMA::Finish() {
     lock_guard<mutex> queue_lock(queue->latch);
     queue->current_task_numa[numa_id].store(nullptr, std::memory_order_release);
     queue->TryFill(numa_id);
+    executor.UnregisterTask();
 }
 
 }

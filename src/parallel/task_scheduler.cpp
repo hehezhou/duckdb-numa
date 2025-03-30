@@ -86,11 +86,10 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 
 				switch (execute_result) {
 				case TaskExecutionResult::TASK_FINISHED:
-				case TaskExecutionResult::TASK_ERROR:
 					task.reset();
 					break;
 				default:
-					throw NotImplementedException("Disallowed in Research");
+					throw NotImplementedException("Disallowed in Research TaskScheduler::ExecuteForever");
 				}
 			} else if (execute_type == TASK_NUMA_LOCAL) {
 				task_numa->Execute(TaskNUMAExecutionMode::PROCESS_LOCAL, cpu_id);
@@ -110,11 +109,11 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 }
 
 idx_t TaskScheduler::ExecuteTasks(atomic<bool> *marker, idx_t max_tasks) {
-	throw NotImplementedException("Disallowed in Research");
+	throw NotImplementedException("Disallowed in Research TaskScheduler::ExecuteTasks(marker, max_tasks)");
 }
 
 void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
-	throw NotImplementedException("Disallowed in Research");
+	throw NotImplementedException("Disallowed in Research TaskScheduler::ExecuteTasks(max_tasks)");
 }
 
 #ifndef DUCKDB_NO_THREADS

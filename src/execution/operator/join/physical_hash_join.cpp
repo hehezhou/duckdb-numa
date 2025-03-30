@@ -346,9 +346,9 @@ void PhysicalHashJoin::PrepareFinalize(ClientContext &context, GlobalSinkState &
 
 class HashJoinTableInitTaskNUMA : public TaskNUMA {
 public:
-	HashJoinTableInitTaskNUMA(shared_ptr<Event> event_p, HashJoinGlobalSinkState &sink_p,
+	HashJoinTableInitTaskNUMA(Pipeline &pipeline, shared_ptr<Event> event_p, HashJoinGlobalSinkState &sink_p,
 							  vector<std::tuple<idx_t, idx_t>> tasks, idx_t numa_id)
-	    : TaskNUMA(event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {}
+	    : TaskNUMA(pipeline.executor, event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {}
 
 	void RegisterInternal() {
 		schedule_queue.load(std::memory_order_relaxed)->semaphore[0].signal(tasks.size());
@@ -412,7 +412,7 @@ public:
 				}
 			}
 		}
-		SetTaskNUMA(new HashJoinTableInitTaskNUMA(shared_from_this(), sink, std::move(init_tasks), pipeline->numa_id));
+		SetTaskNUMA(new HashJoinTableInitTaskNUMA(*pipeline, shared_from_this(), sink, std::move(init_tasks), pipeline->numa_id));
 	}
 
 	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
@@ -420,9 +420,9 @@ public:
 
 class HashJoinFinalizeTaskNUMA : public TaskNUMA {
 public:
-	HashJoinFinalizeTaskNUMA(shared_ptr<Event> event_p, HashJoinGlobalSinkState &sink_p,
-							  vector<std::tuple<idx_t, idx_t>> tasks, idx_t numa_id)
-	    : TaskNUMA(event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {}
+	HashJoinFinalizeTaskNUMA(Pipeline &pipeline, shared_ptr<Event> event_p, HashJoinGlobalSinkState &sink_p,
+							 vector<std::tuple<idx_t, idx_t>> tasks, idx_t numa_id)
+	    : TaskNUMA(pipeline.executor, event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {}
 
 	void RegisterInternal() {
 		schedule_queue.load(std::memory_order_relaxed)->semaphore[0].signal(tasks.size());
@@ -487,7 +487,7 @@ public:
 				}
 			}
 		}
-		SetTaskNUMA(new HashJoinFinalizeTaskNUMA(shared_from_this(), sink, std::move(finalize_tasks), pipeline->numa_id));
+		SetTaskNUMA(new HashJoinFinalizeTaskNUMA(*pipeline, shared_from_this(), sink, std::move(finalize_tasks), pipeline->numa_id));
 	}
 
 	void FinishEvent() override {
