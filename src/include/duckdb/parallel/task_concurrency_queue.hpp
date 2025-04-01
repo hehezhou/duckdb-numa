@@ -27,7 +27,16 @@ struct ConcurrentQueue {
 	std::queue<TaskNUMA*> q_numa[2];
 	lightweight_semaphore_t semaphore[2];
 	std::atomic<TaskNUMA*> current_task_numa[2];
+	std::atomic<idx_t> wait_steal[2];
+	std::atomic<bool> stealable[2];
+
 	mutex latch;
+
+	ConcurrentQueue() {
+		current_task_numa[0] = current_task_numa[1] = nullptr;
+		wait_steal[0] = wait_steal[1] = 0;
+		stealable[0] = stealable[1] = false;
+	}
 
 	void Enqueue(ProducerToken &token, shared_ptr<Task> task);
 	void EnqueueNUMA(ProducerToken &token, TaskNUMA* task);
@@ -36,6 +45,7 @@ struct ConcurrentQueue {
 	//! Must be called when holding latch.
 	bool TryFill(idx_t numa_id);
 	void SignAll(idx_t n);
+	void AddSteal(idx_t numa_id, idx_t count);
 };
 
 struct QueueProducerToken {

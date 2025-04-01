@@ -59,6 +59,9 @@ public:
 
 	void RegisterInternal() override;
 
+	bool TryLocal() override { return true; }
+	bool TrySteal() override { return false; }
+
 private:
 	void FinishExecutor(PipelineExecutor *executor);
 

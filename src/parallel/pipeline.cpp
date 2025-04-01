@@ -127,9 +127,6 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 		FinishExecutor(executor_ptr);
 	} else {
 		auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_release) - 1;
-		if (rest_tasks < PREPARE_FINISH) {
-			throw InternalException("???");
-		}
 		if (rest_tasks == PREPARE_FINISH) {
 			Finish();
 		}
@@ -156,9 +153,6 @@ void PipelineTaskNUMA::FinishExecutor(PipelineExecutor *executor) {
 	}
 	delete executor;
 	auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_release) - 1;
-	if (rest_tasks < PREPARE_FINISH) {
-		throw InternalException("???");
-	}
 	if (rest_tasks == PREPARE_FINISH) {
 		Finish();
 	}

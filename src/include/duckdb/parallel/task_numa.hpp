@@ -29,6 +29,12 @@ public:
 
 	virtual void RegisterInternal() = 0;
 
+	virtual bool TryLocal() {
+		return true;
+	}
+
+	virtual bool TrySteal() = 0;
+
 	void Finish();
 
 protected:

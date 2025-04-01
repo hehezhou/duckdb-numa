@@ -80,22 +80,21 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 	TaskNUMA* task_numa;
 	// loop until the marker is set to false
 	while (*marker) {
-		if (auto execute_type = queue->Dequeue(task, task_numa, cpu_id); execute_type != NO_TASK) {
-			if (execute_type == TASK_NORMAL) {
-				auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
+		auto execute_type = queue->Dequeue(task, task_numa, cpu_id);
+		if (execute_type == TASK_NORMAL) {
+			auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
 
-				switch (execute_result) {
-				case TaskExecutionResult::TASK_FINISHED:
-					task.reset();
-					break;
-				default:
-					throw NotImplementedException("Disallowed in Research TaskScheduler::ExecuteForever");
-				}
-			} else if (execute_type == TASK_NUMA_LOCAL) {
-				task_numa->Execute(TaskNUMAExecutionMode::PROCESS_LOCAL, cpu_id);
-			} else if (execute_type == TASK_NUMA_STEAL) {
-				task_numa->Execute(TaskNUMAExecutionMode::PROCESS_STEAL, cpu_id);
+			switch (execute_result) {
+			case TaskExecutionResult::TASK_FINISHED:
+				task.reset();
+				break;
+			default:
+				throw NotImplementedException("Disallowed in Research TaskScheduler::ExecuteForever");
 			}
+		} else if (execute_type == TASK_NUMA_LOCAL) {
+			task_numa->Execute(TaskNUMAExecutionMode::PROCESS_LOCAL, cpu_id);
+		} else if (execute_type == TASK_NUMA_STEAL) {
+			task_numa->Execute(TaskNUMAExecutionMode::PROCESS_STEAL, cpu_id);
 		}
 	}
 	// this thread will exit, flush all of its outstanding allocations
