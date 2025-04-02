@@ -351,8 +351,7 @@ public:
 	    : TaskNUMA(pipeline.executor, event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {}
 
 	void RegisterInternal() {
-		schedule_queue.load(std::memory_order_relaxed)->semaphore[0].signal(tasks.size());
-		schedule_queue.load(std::memory_order_relaxed)->semaphore[1].signal(tasks.size());
+		schedule_queue.load()->semaphore[numa_id].signal(tasks.size());
 	}
 
 	TaskExecutionResult Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) override {
@@ -427,9 +426,9 @@ public:
 	    : TaskNUMA(pipeline.executor, event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {}
 
 	void RegisterInternal() {
-		schedule_queue.load(std::memory_order_relaxed)->semaphore[numa_id].signal(tasks.size());
-		schedule_queue.load(std::memory_order_relaxed)
-			->AddSteal(numa_id, MinValue<idx_t>(tasks.size(), thread_count / 2));
+		auto queue = schedule_queue.load(std::memory_order_relaxed);
+		queue->semaphore[numa_id].signal(MinValue<idx_t>(tasks.size(), thread_count / 2));
+		queue->AddSteal(numa_id, MinValue<idx_t>(tasks.size(), thread_count / 2));
 	}
 
 	TaskExecutionResult Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) override {

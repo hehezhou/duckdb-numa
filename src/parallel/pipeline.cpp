@@ -7,6 +7,7 @@
 #include "duckdb/execution/operator/aggregate/physical_ungrouped_aggregate.hpp"
 #include "duckdb/execution/operator/scan/physical_table_scan.hpp"
 #include "duckdb/execution/operator/set/physical_recursive_cte.hpp"
+#include "duckdb/execution/operator/helper/physical_pipeline_breaker.hpp"
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/main/database.hpp"
 #include "duckdb/parallel/pipeline_event.hpp"
@@ -65,31 +66,40 @@ TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 	return TaskExecutionResult::TASK_FINISHED;
 }
 
-PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task)
-	: TaskNUMA(pipeline_p.executor, std::move(event_p), numa_id, is_final_task), pipeline(pipeline_p) {
+PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task,
+								   PhysicalPipelineBreaker *breaker_source_p)
+	: TaskNUMA(pipeline_p.executor, std::move(event_p), numa_id, is_final_task), pipeline(pipeline_p), breaker_source(breaker_source_p) {
 	for (auto &i : executors) {
-		i.store(nullptr, std::memory_order_relaxed);
+		i.store(nullptr);
 	}
 }
 
 void PipelineTaskNUMA::RegisterInternal() {
-	auto queue = schedule_queue.load(std::memory_order_relaxed);
-	queue->semaphore[0].signal(thread_count / 2);
-	queue->semaphore[1].signal(thread_count / 2);
+	auto queue = schedule_queue.load();
+	queue->semaphore[numa_id].signal(thread_count / 2);
+	queue->AddSteal(numa_id, thread_count / 2);
+}
+
+bool PipelineTaskNUMA::TryLocal() {
+	return true;
+}
+
+bool PipelineTaskNUMA::TrySteal() {
+	return false;
 }
 
 TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) {
-	auto executor_ptr = executors[cpu_id].load(std::memory_order_relaxed);
+	auto executor_ptr = executors[cpu_id].load();
 	if (executor_ptr == nullptr) {
-		auto active_tasks_expect = active_tasks.load(std::memory_order_relaxed);
+		auto active_tasks_expect = active_tasks.load();
 		do {
 			if (active_tasks_expect & PREPARE_FINISH) {
 				return TaskExecutionResult::TASK_FINISHED;
 			}
-		} while (!active_tasks.compare_exchange_weak(active_tasks_expect, active_tasks_expect + 1, std::memory_order_relaxed));
+		} while (!active_tasks.compare_exchange_weak(active_tasks_expect, active_tasks_expect + 1));
 		executor_ptr = new PipelineExecutor(pipeline.GetClientContext(), pipeline);
 	} else {
-		if (!executors[cpu_id].compare_exchange_strong(executor_ptr, nullptr, std::memory_order_relaxed)) {
+		if (!executors[cpu_id].compare_exchange_strong(executor_ptr, nullptr)) {
 			return TaskExecutionResult::TASK_FINISHED;
 		}
 	}
@@ -106,38 +116,51 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 		}
 		break;
 	}
+	case TaskNUMAExecutionMode::PROCESS_STEAL: {
+		auto result = executor_ptr->Execute(50);
+		if (result == PipelineExecuteResult::FINISHED) {
+			delete executor_ptr;
+			finish_tag = true;
+		} else if (result == PipelineExecuteResult::NOT_FINISHED) {
+			finish_tag = false;
+			schedule_queue.load()->AddSteal(numa_id, 1);
+		} else {
+			throw InternalException("Disallowed in Research PipelineTaskNUMA::Execute");
+		}
+		break;
+	}
 	default:
 		throw InternalException("PipelineTaskNUMA: wrong numa execute mode");
 	}
 
 	if (!finish_tag) {
-		executors[cpu_id].store(executor_ptr, std::memory_order_acquire);
-		if (active_tasks.load(std::memory_order_acquire) & PREPARE_FINISH) {
-			while (!executors[cpu_id].compare_exchange_weak(executor_ptr, nullptr, std::memory_order_relaxed));
+		executors[cpu_id].store(executor_ptr);
+		if (active_tasks.load() & PREPARE_FINISH) {
+			while (!executors[cpu_id].compare_exchange_weak(executor_ptr, nullptr));
 		} else {
 			return TaskExecutionResult::TASK_NOT_FINISHED;
 		}
 	}
 
 	if (finish_tag) {
-		active_tasks.fetch_or(PREPARE_FINISH, std::memory_order_acquire);
+		active_tasks.fetch_or(PREPARE_FINISH);
 	}
 
 	if (!finish_tag) {
 		FinishExecutor(executor_ptr);
 	} else {
-		auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_release) - 1;
+		auto rest_tasks = active_tasks.fetch_sub(1) - 1;
 		if (rest_tasks == PREPARE_FINISH) {
 			Finish();
 		}
 	}
 	while (true) {
-		auto finish_ptr_local = finish_ptr.fetch_add(1, std::memory_order_relaxed);
+		auto finish_ptr_local = finish_ptr.fetch_add(1);
 		if (finish_ptr_local >= thread_count) {
 			break;
 		}
-		executor_ptr = executors[finish_ptr_local].load(std::memory_order_relaxed);
-		while (executor_ptr != nullptr && !executors[finish_ptr_local].compare_exchange_weak(executor_ptr, nullptr, std::memory_order_relaxed));
+		executor_ptr = executors[finish_ptr_local].load();
+		while (executor_ptr != nullptr && !executors[finish_ptr_local].compare_exchange_weak(executor_ptr, nullptr));
 		FinishExecutor(executor_ptr);
 	}
 	return TaskExecutionResult::TASK_FINISHED;
@@ -152,7 +175,7 @@ void PipelineTaskNUMA::FinishExecutor(PipelineExecutor *executor) {
 		throw InternalException("Disabled in project");
 	}
 	delete executor;
-	auto rest_tasks = active_tasks.fetch_sub(1, std::memory_order_release) - 1;
+	auto rest_tasks = active_tasks.fetch_sub(1) - 1;
 	if (rest_tasks == PREPARE_FINISH) {
 		Finish();
 	}
@@ -276,8 +299,16 @@ bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
 	// 	tasks.push_back(make_uniq<PipelineTask>(*this, event));
 	// }
 	// event->SetTasks(std::move(tasks));
-	
-	event->SetTaskNUMA(new PipelineTaskNUMA(*this, event, numa_id, false));
+	auto breaker_source = dynamic_cast<PhysicalPipelineBreaker*>(source.get());
+	if (breaker_source) {
+		event->SetTaskNUMA(new PipelineTaskNUMA(*this, event, numa_id, true, breaker_source));
+	} else {
+		bool is_final_task = false;
+		if (dynamic_cast<PhysicalPipelineBreaker*>(sink.get()) != nullptr) {
+			is_final_task = true;
+		}
+		event->SetTaskNUMA(new PipelineTaskNUMA(*this, event, numa_id, is_final_task));
+	}
 	return true;
 }
 

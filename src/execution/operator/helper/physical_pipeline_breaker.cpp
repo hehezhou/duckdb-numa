@@ -44,7 +44,7 @@ private:
 	vector<column_t> column_ids;
 };
 
-void ConcurrentChunkQueue::Enqueue(ChunkReference &&chunk_ref) {
+void ConcurrentChunkQueue::Enqueue(BreakerChunkReference &&chunk_ref) {
 	if (q.enqueue(std::move(chunk_ref))) {
 		semaphore.signal();
 	} else {
@@ -52,7 +52,7 @@ void ConcurrentChunkQueue::Enqueue(ChunkReference &&chunk_ref) {
 	}
 }
 
-bool ConcurrentChunkQueue::TryDequeue(ChunkReference &chunk_ref) {
+bool ConcurrentChunkQueue::TryDequeue(BreakerChunkReference &chunk_ref) {
 	semaphore.wait();
 	return q.try_dequeue(chunk_ref);
 }
@@ -92,7 +92,7 @@ SinkResultType PhysicalPipelineBreaker::Sink(ExecutionContext &context, DataChun
 	auto &lstate = input.local_state.Cast<PipelineBreakerSinkState>();
 	lstate.buffer->Append(chunk);
 	while (lstate.added_chunk + 1 < lstate.buffer->ChunkCount()) {
-		ChunkReference chunk_ref{lstate.buffer, std::move(lstate.buffer->FetchChunkMeta(lstate.added_chunk))};
+		BreakerChunkReference chunk_ref{lstate.buffer, std::move(lstate.buffer->FetchChunkMeta(lstate.added_chunk))};
 		chunk_queue->Enqueue(std::move(chunk_ref));
 		lstate.added_chunk++;
 	}
@@ -102,7 +102,7 @@ SinkResultType PhysicalPipelineBreaker::Sink(ExecutionContext &context, DataChun
 SinkCombineResultType PhysicalPipelineBreaker::Combine(ExecutionContext &context, OperatorSinkCombineInput &input) const {
 	auto &lstate = input.local_state.Cast<PipelineBreakerSinkState>();
 	while (lstate.added_chunk < lstate.buffer->ChunkCount()) {
-		ChunkReference chunk_ref{lstate.buffer, std::move(lstate.buffer->FetchChunkMeta(lstate.added_chunk))};
+		BreakerChunkReference chunk_ref{lstate.buffer, std::move(lstate.buffer->FetchChunkMeta(lstate.added_chunk))};
 		chunk_queue->Enqueue(std::move(chunk_ref));
 		lstate.added_chunk++;
 	}
@@ -146,7 +146,7 @@ unique_ptr<LocalSourceState> PhysicalPipelineBreaker::GetLocalSourceState(Execut
 SourceResultType PhysicalPipelineBreaker::GetData(ExecutionContext &context, DataChunk &chunk,
                                                   OperatorSourceInput &input) const {
 	auto &lstate = input.local_state.Cast<PipelineBreakerLocalSource>();
-	ChunkReference chunk_ref;
+	BreakerChunkReference chunk_ref;
 	if (chunk_queue->TryDequeue(chunk_ref)) {
 		chunk_ref.buffer->Scan(chunk_ref.chunk_meta, chunk, lstate.scan_state);
 		return SourceResultType::HAVE_MORE_OUTPUT;

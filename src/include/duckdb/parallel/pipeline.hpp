@@ -27,6 +27,7 @@ class Event;
 class MetaPipeline;
 class PipelineExecutor;
 class Pipeline;
+class PhysicalPipelineBreaker;
 
 class PipelineTask : public ExecutorTask {
 	static constexpr const idx_t PARTIAL_CHUNK_COUNT = 50;
@@ -49,7 +50,8 @@ class PipelineTaskNUMA : public TaskNUMA {
 	static constexpr const idx_t PREPARE_FINISH = 1ull << 63;
 
 public:
-	explicit PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task);
+	explicit PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task,
+							  PhysicalPipelineBreaker *breaker_source_p = nullptr);
 	~PipelineTaskNUMA() {}
 
 	Pipeline &pipeline;
@@ -59,8 +61,8 @@ public:
 
 	void RegisterInternal() override;
 
-	bool TryLocal() override { return true; }
-	bool TrySteal() override { return false; }
+	bool TryLocal() override;
+	bool TrySteal() override;
 
 private:
 	void FinishExecutor(PipelineExecutor *executor);
@@ -69,6 +71,7 @@ private:
 	std::atomic<PipelineExecutor*> executors[thread_count];
 	std::atomic<idx_t> active_tasks{0};
 	std::atomic<idx_t> finish_ptr{0};
+	PhysicalPipelineBreaker *breaker_source;
 };
 
 class PipelineBuildState {

@@ -13,25 +13,29 @@ TaskNUMA::TaskNUMA(Executor &executor, shared_ptr<Event> event, idx_t numa_id, b
 TaskNUMA::~TaskNUMA() {}
 
 void TaskNUMA::Register(ConcurrentQueue *queue) {
-    queue->current_task_numa[numa_id].store(this, std::memory_order_release);
-    schedule_queue.store(queue, std::memory_order_release);
+    queue->current_task_numa[numa_id].store(this);
+    schedule_queue.store(queue);
     RegisterInternal();
 }
 
 void TaskNUMA::Finish() {
     bool expected = false;
-    if (!finished.compare_exchange_strong(expected, true, std::memory_order_release)) {
+    if (!finished.compare_exchange_strong(expected, true)) {
         return;
     }
-    event->FinishTask();
-    ConcurrentQueue *queue = schedule_queue.load(std::memory_order_relaxed);
+    ConcurrentQueue *queue = schedule_queue.load();
     while (queue == nullptr) {
         asm volatile("rep; nop" ::: "memory");
-        queue = schedule_queue.load(std::memory_order_relaxed);
+        queue = schedule_queue.load();
     }
-    lock_guard<mutex> queue_lock(queue->latch);
-    queue->current_task_numa[numa_id].store(nullptr, std::memory_order_release);
+
+    unique_lock<mutex> queue_lock(queue->latch);
+    queue->wait_steal[numa_id].store(0);
+    queue->current_task_numa[numa_id].store(nullptr);
     queue->TryFill(numa_id);
+    queue_lock.unlock();
+
+    event->FinishTask();
     executor.UnregisterTask();
 }
 

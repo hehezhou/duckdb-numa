@@ -22,18 +22,18 @@ namespace duckdb {
 
 class ChunkBuffer;
 
-struct ChunkReference {
+struct BreakerChunkReference {
 	shared_ptr<ChunkBuffer> buffer;
 	ChunkMetaData chunk_meta;
 };
 
-typedef duckdb_moodycamel::ConcurrentQueue<ChunkReference> concurrent_chunk_queue_t;
+typedef duckdb_moodycamel::ConcurrentQueue<BreakerChunkReference> concurrent_chunk_queue_t;
 typedef duckdb_moodycamel::LightweightSemaphore lightweight_semaphore_t;
 
 struct ConcurrentChunkQueue {
 public:
-	void Enqueue(ChunkReference &&chunk_ref);
-	bool TryDequeue(ChunkReference &chunk_ref);
+	void Enqueue(BreakerChunkReference &&chunk_ref);
+	bool TryDequeue(BreakerChunkReference &chunk_ref);
 	void Finalize();
 
 private:
