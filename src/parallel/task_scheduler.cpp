@@ -63,6 +63,10 @@ void TaskScheduler::ScheduleTask(ProducerToken &token, shared_ptr<Task> task) {
 	queue->Enqueue(token, std::move(task));
 }
 
+void TaskScheduler::NUMAInit() {
+	queue->stealable[0] = queue->stealable[1] = false;
+}
+
 void TaskScheduler::ScheduleTaskNUMA(ProducerToken &token, TaskNUMA *task) {
 	// Enqueue a task for the given producer token and signal any sleeping threads
 	queue->EnqueueNUMA(token, task);

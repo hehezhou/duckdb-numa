@@ -76,6 +76,8 @@ public:
 	//! Result do not need to be exact 'return 0' is a valid fallback strategy
 	static idx_t GetEstimatedCPUId();
 
+	void NUMAInit();
+
 private:
 	void RelaunchThreadsInternal(int32_t n);
 

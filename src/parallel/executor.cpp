@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <chrono>
 
+double numa_test_start;
+
 namespace duckdb {
 
 Executor::Executor(ClientContext &context) : context(context), executor_tasks(0), blocked_thread_time(0) {
@@ -400,7 +402,12 @@ void Executor::InitializeInternal(PhysicalOperator &plan) {
 		// build and ready the pipelines
 		PipelineBuildState state;
 		auto root_pipeline = make_shared_ptr<MetaPipeline>(*this, state, nullptr);
+
+		numa_test_start = GetNow();
 		InitParams();
+		auto &ts = TaskScheduler::GetScheduler(this->context);
+		ts.NUMAInit();
+		
 		root_pipeline->Build(*physical_plan);
 		root_pipeline->Ready();
 
