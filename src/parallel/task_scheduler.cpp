@@ -85,6 +85,12 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 	// loop until the marker is set to false
 	while (*marker) {
 		auto execute_type = queue->Dequeue(task, task_numa, cpu_id);
+		if (execute_type == NO_TASK) {
+			continue;
+		}
+		if (cpu_id == 3 || cpu_id == 4 || execute_type == TASK_NUMA_STEAL) {
+			Printer::PrintF("Task Get %d %d %f", static_cast<int>(cpu_id), static_cast<int>(execute_type), GetNow() - numa_test_start);
+		}
 		if (execute_type == TASK_NORMAL) {
 			auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
 
@@ -99,6 +105,11 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 			task_numa->Execute(TaskNUMAExecutionMode::PROCESS_LOCAL, cpu_id);
 		} else if (execute_type == TASK_NUMA_STEAL) {
 			task_numa->Execute(TaskNUMAExecutionMode::PROCESS_STEAL, cpu_id);
+		} else {
+			abort();
+		}
+		if (cpu_id == 3 || cpu_id == 4 || execute_type == TASK_NUMA_STEAL) {
+			Printer::PrintF("Task End %d %d %f", static_cast<int>(cpu_id), static_cast<int>(execute_type), GetNow() - numa_test_start);
 		}
 	}
 	// this thread will exit, flush all of its outstanding allocations

@@ -117,7 +117,7 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 		break;
 	}
 	case TaskNUMAExecutionMode::PROCESS_STEAL: {
-		auto result = executor_ptr->Execute(50);
+		auto result = executor_ptr->Execute(5);
 		if (result == PipelineExecuteResult::FINISHED) {
 			delete executor_ptr;
 			finish_tag = true;
@@ -135,8 +135,9 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 
 	if (!finish_tag) {
 		executors[cpu_id].store(executor_ptr);
+		executor_ptr = nullptr;
 		if (active_tasks.load() & PREPARE_FINISH) {
-			while (!executors[cpu_id].compare_exchange_weak(executor_ptr, nullptr));
+			executors[cpu_id].exchange(executor_ptr);
 		} else {
 			return TaskExecutionResult::TASK_NOT_FINISHED;
 		}
@@ -159,8 +160,8 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 		if (finish_ptr_local >= thread_count) {
 			break;
 		}
-		executor_ptr = executors[finish_ptr_local].load();
-		while (executor_ptr != nullptr && !executors[finish_ptr_local].compare_exchange_weak(executor_ptr, nullptr));
+		executor_ptr = nullptr;
+		executors[finish_ptr_local].exchange(executor_ptr);
 		FinishExecutor(executor_ptr);
 	}
 	return TaskExecutionResult::TASK_FINISHED;
@@ -240,9 +241,6 @@ bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
 	if (max_threads > active_threads) {
 		max_threads = active_threads;
 	}
-	if (max_threads >= 46) {
-		max_threads = 46;
-	}
 	return LaunchScanTasks(event, max_threads);
 }
 
@@ -309,6 +307,7 @@ bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
 		}
 		event->SetTaskNUMA(new PipelineTaskNUMA(*this, event, numa_id, is_final_task));
 	}
+	Printer::PrintF("Pipeline %d %d", numa_id, max_threads);
 	return true;
 }
 

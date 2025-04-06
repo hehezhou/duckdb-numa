@@ -255,7 +255,7 @@ SinkNextBatchType PipelineExecutor::NextBatch(duckdb::DataChunk &source_chunk) {
 PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 	D_ASSERT(pipeline.sink);
 	auto &source_chunk = pipeline.operators.empty() ? final_chunk : *intermediate_chunks[0];
-	for (idx_t fetched_chunks = 0; fetched_chunks < max_chunks; ) {
+	while (true) {
 		double start = getNow();
 		if (context.client.interrupted) {
 			throw InterruptException();
@@ -288,9 +288,16 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 			SourceResultType source_result;
 			if (!next_batch_blocked) {
 				// "Regular" path: fetch a chunk from the source and push it through the pipeline
+				if (max_chunks == 0) {
+					if (!IsFinished()) {
+						return PipelineExecuteResult::NOT_FINISHED;
+					}
+					return PushFinalize();
+				}
+				max_chunks--;
+
 				source_chunk.Reset();
 				source_result = FetchFromSource(source_chunk);
-				fetched_chunks++;
 				if (source_result == SourceResultType::BLOCKED) {
 					return PipelineExecuteResult::INTERRUPTED;
 				}

@@ -29,9 +29,10 @@ bool ConcurrentQueue::TryFill(idx_t numa_id) {
         auto task = q_numa[numa_id].front();
         q_numa[numa_id].pop();
         task->Register(this);
-        auto old = stealable[numa_id].exchange(task->is_final_task);
-        if (!old && task->is_final_task) {
-            semaphore[numa_id].signal(wait_steal[numa_id ^ 1].exchange(0));
+        if (task->is_final_task) {
+            if (!stealable[numa_id].exchange(task->is_final_task)) {
+                semaphore[numa_id].signal(wait_steal[numa_id ^ 1].exchange(0));
+            }
         }
         return true;
     }
