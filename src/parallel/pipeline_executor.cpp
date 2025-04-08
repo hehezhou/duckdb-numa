@@ -289,10 +289,7 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 			if (!next_batch_blocked) {
 				// "Regular" path: fetch a chunk from the source and push it through the pipeline
 				if (max_chunks == 0) {
-					if (!IsFinished()) {
-						return PipelineExecuteResult::NOT_FINISHED;
-					}
-					return PushFinalize();
+					break;
 				}
 				max_chunks--;
 

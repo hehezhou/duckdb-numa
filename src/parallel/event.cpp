@@ -86,7 +86,6 @@ void Event::SetTasks(vector<shared_ptr<Task>> tasks) {
 
 void Event::SetTaskNUMA(TaskNUMA *task_numa) {
 	auto &ts = TaskScheduler::GetScheduler(executor.context);
-	std::cerr << "Test " << task_numa->numa_id << std::endl;
 	D_ASSERT(total_tasks == 0);
 	this->total_tasks = 1;
 	ts.ScheduleTaskNUMA(executor.GetToken(), task_numa);

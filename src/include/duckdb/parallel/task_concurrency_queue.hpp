@@ -15,7 +15,7 @@ class TaskScheduler;
 typedef duckdb_moodycamel::ConcurrentQueue<shared_ptr<Task>> concurrent_queue_t;
 typedef duckdb_moodycamel::LightweightSemaphore lightweight_semaphore_t;
 
-enum DequeueResult {
+enum class DequeueResult : uint8_t {
 	NO_TASK,
 	TASK_NORMAL,
 	TASK_NUMA_LOCAL,

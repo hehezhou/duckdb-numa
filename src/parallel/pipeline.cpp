@@ -68,7 +68,21 @@ TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 
 PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task,
 								   PhysicalPipelineBreaker *breaker_source_p)
-	: TaskNUMA(pipeline_p.executor, std::move(event_p), numa_id, is_final_task), pipeline(pipeline_p), breaker_source(breaker_source_p) {
+	: TaskNUMA(pipeline_p.executor, std::move(event_p), numa_id, is_final_task), pipeline(pipeline_p) {
+	Printer::PrintF("breaker source %d %f", numa_id, GetNow() - numa_test_start);
+	rest_chunk = 10000000;
+	input_finished = true;
+	for (auto &i : executors) {
+		i.store(nullptr);
+	}
+}
+
+PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task,
+								   idx_t source_chunks)
+	: TaskNUMA(pipeline_p.executor, std::move(event_p), numa_id, is_final_task), pipeline(pipeline_p) {
+	Printer::PrintF("normal source %d %d %f", numa_id, source_chunks, GetNow() - numa_test_start);
+	rest_chunk = MaxValue<idx_t>(source_chunks, 48);
+	input_finished = true;
 	for (auto &i : executors) {
 		i.store(nullptr);
 	}
@@ -76,20 +90,35 @@ PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event
 
 void PipelineTaskNUMA::RegisterInternal() {
 	auto queue = schedule_queue.load();
-	queue->semaphore[numa_id].signal(thread_count / 2);
-	queue->AddSteal(numa_id, thread_count / 2);
+	auto chunks = rest_chunk.load();
+	queue->semaphore[numa_id].signal(MinValue<idx_t>(thread_count / 2, chunks));
+	if (chunks >= thread_count / 2 * LOCAL_AT_LEAST + STEAL_CHUNKS) {
+		queue->AddSteal(numa_id, MinValue<idx_t>(thread_count / 2, ((chunks - thread_count / 2 * LOCAL_AT_LEAST) / STEAL_CHUNKS)));
+	}
 }
 
 bool PipelineTaskNUMA::TryLocal() {
+	auto chunks = rest_chunk.load(std::memory_order_relaxed);
+	do {
+		if (chunks == 0) {
+			return false;
+		}
+	} while (!rest_chunk.compare_exchange_weak(chunks, chunks - 1, std::memory_order_relaxed));
 	return true;
 }
 
 bool PipelineTaskNUMA::TrySteal() {
-	return false;
+	auto chunks = rest_chunk.load(std::memory_order_relaxed);
+	do {
+		if (chunks < thread_count / 2 * LOCAL_AT_LEAST + STEAL_CHUNKS) {
+			return false;
+		}
+	} while (!rest_chunk.compare_exchange_weak(chunks, chunks - STEAL_CHUNKS, std::memory_order_relaxed));
+	return true;
 }
 
 TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) {
-	auto executor_ptr = executors[cpu_id].load();
+	PipelineExecutor *executor_ptr = executors[cpu_id].exchange(nullptr);
 	if (executor_ptr == nullptr) {
 		auto active_tasks_expect = active_tasks.load();
 		do {
@@ -98,32 +127,30 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 			}
 		} while (!active_tasks.compare_exchange_weak(active_tasks_expect, active_tasks_expect + 1));
 		executor_ptr = new PipelineExecutor(pipeline.GetClientContext(), pipeline);
-	} else {
-		if (!executors[cpu_id].compare_exchange_strong(executor_ptr, nullptr)) {
-			return TaskExecutionResult::TASK_FINISHED;
-		}
 	}
 
 	bool finish_tag = false;
 	switch (mode) {
 	case TaskNUMAExecutionMode::PROCESS_LOCAL: {
-		auto result = executor_ptr->Execute();
-		if (result == PipelineExecuteResult::FINISHED) {
-			delete executor_ptr;
-			finish_tag = true;
-		} else {
-			throw InternalException("Disallowed in Research PipelineTaskNUMA::Execute");
-		}
+		do {
+			auto result = executor_ptr->Execute(1);
+			if (result == PipelineExecuteResult::FINISHED) {
+				delete executor_ptr;
+				finish_tag = true;
+				break;
+			}
+		} while (TryLocal() || input_finished);
 		break;
 	}
 	case TaskNUMAExecutionMode::PROCESS_STEAL: {
-		auto result = executor_ptr->Execute(5);
+		auto result = executor_ptr->Execute(STEAL_CHUNKS);
 		if (result == PipelineExecuteResult::FINISHED) {
 			delete executor_ptr;
 			finish_tag = true;
 		} else if (result == PipelineExecuteResult::NOT_FINISHED) {
-			finish_tag = false;
-			schedule_queue.load()->AddSteal(numa_id, 1);
+			if (rest_chunk >= thread_count / 2 * LOCAL_AT_LEAST + STEAL_CHUNKS) {
+				schedule_queue.load()->AddSteal(numa_id, 1);
+			}
 		} else {
 			throw InternalException("Disallowed in Research PipelineTaskNUMA::Execute");
 		}
@@ -135,9 +162,8 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 
 	if (!finish_tag) {
 		executors[cpu_id].store(executor_ptr);
-		executor_ptr = nullptr;
 		if (active_tasks.load() & PREPARE_FINISH) {
-			executors[cpu_id].exchange(executor_ptr);
+			executor_ptr = executors[cpu_id].exchange(nullptr);
 		} else {
 			return TaskExecutionResult::TASK_NOT_FINISHED;
 		}
@@ -160,8 +186,7 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 		if (finish_ptr_local >= thread_count) {
 			break;
 		}
-		executor_ptr = nullptr;
-		executors[finish_ptr_local].exchange(executor_ptr);
+		executor_ptr = executors[finish_ptr_local].exchange(nullptr);
 		FinishExecutor(executor_ptr);
 	}
 	return TaskExecutionResult::TASK_FINISHED;
@@ -232,14 +257,8 @@ bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
 	auto max_threads = source_state->MaxThreads();
 	auto &scheduler = TaskScheduler::GetScheduler(executor.context);
 	auto active_threads = NumericCast<idx_t>(scheduler.NumberOfThreads());
-	if (max_threads > active_threads) {
-		max_threads = active_threads;
-	}
 	if (sink && sink->sink_state) {
 		max_threads = sink->sink_state->MaxThreads(max_threads);
-	}
-	if (max_threads > active_threads) {
-		max_threads = active_threads;
 	}
 	return LaunchScanTasks(event, max_threads);
 }
@@ -305,9 +324,8 @@ bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
 		if (dynamic_cast<PhysicalPipelineBreaker*>(sink.get()) != nullptr) {
 			is_final_task = true;
 		}
-		event->SetTaskNUMA(new PipelineTaskNUMA(*this, event, numa_id, is_final_task));
+		event->SetTaskNUMA(new PipelineTaskNUMA(*this, event, numa_id, is_final_task, max_threads));
 	}
-	Printer::PrintF("Pipeline %d %d", numa_id, max_threads);
 	return true;
 }
 

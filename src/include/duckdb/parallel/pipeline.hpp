@@ -51,7 +51,9 @@ class PipelineTaskNUMA : public TaskNUMA {
 
 public:
 	explicit PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task,
-							  PhysicalPipelineBreaker *breaker_source_p = nullptr);
+							  PhysicalPipelineBreaker *breaker_source_p);
+	explicit PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task,
+							  idx_t source_chunks);
 	~PipelineTaskNUMA() {}
 
 	Pipeline &pipeline;
@@ -71,7 +73,9 @@ private:
 	std::atomic<PipelineExecutor*> executors[thread_count];
 	std::atomic<idx_t> active_tasks{0};
 	std::atomic<idx_t> finish_ptr{0};
-	PhysicalPipelineBreaker *breaker_source;
+
+	std::atomic<idx_t> rest_chunk{0};
+	std::atomic<bool> input_finished{false};
 };
 
 class PipelineBuildState {

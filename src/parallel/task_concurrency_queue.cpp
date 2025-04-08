@@ -43,17 +43,17 @@ DequeueResult ConcurrentQueue::Dequeue(shared_ptr<Task> &task, TaskNUMA* &task_n
     auto numa_id = cpu_id % 2;
     semaphore[numa_id].wait();
     if (q.try_dequeue(task)) {
-        return TASK_NORMAL;
+        return DequeueResult::TASK_NORMAL;
     }
     task_numa = current_task_numa[numa_id].load();
     if (task_numa != nullptr && task_numa->TryLocal()) {
-        return TASK_NUMA_LOCAL;
+        return DequeueResult::TASK_NUMA_LOCAL;
     }
     task_numa = current_task_numa[numa_id ^ 1].load();
     if (stealable[numa_id].load() && task_numa != nullptr && task_numa->TrySteal()) {
-        return TASK_NUMA_STEAL;
+        return DequeueResult::TASK_NUMA_STEAL;
     }
-    return NO_TASK;
+    return DequeueResult::NO_TASK;
 }
 
 bool ConcurrentQueue::DequeueFromProducer(ProducerToken &token, shared_ptr<Task> &task) {

@@ -13,21 +13,18 @@ TaskNUMA::TaskNUMA(Executor &executor, shared_ptr<Event> event, idx_t numa_id, b
 TaskNUMA::~TaskNUMA() {}
 
 void TaskNUMA::Register(ConcurrentQueue *queue) {
-    queue->current_task_numa[numa_id].store(this);
     schedule_queue.store(queue);
+    queue->current_task_numa[numa_id].store(this);
     RegisterInternal();
 }
 
 void TaskNUMA::Finish() {
+    Printer::PrintF("FINISH %f", GetNow() - numa_test_start);
     bool expected = false;
     if (!finished.compare_exchange_strong(expected, true)) {
         return;
     }
-    ConcurrentQueue *queue = schedule_queue.load();
-    while (queue == nullptr) {
-        asm volatile("rep; nop" ::: "memory");
-        queue = schedule_queue.load();
-    }
+    auto queue = schedule_queue.load();
 
     unique_lock<mutex> queue_lock(queue->latch);
     queue->wait_steal[numa_id].store(0);

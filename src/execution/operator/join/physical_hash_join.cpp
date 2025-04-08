@@ -423,41 +423,67 @@ class HashJoinFinalizeTaskNUMA : public TaskNUMA {
 public:
 	HashJoinFinalizeTaskNUMA(Pipeline &pipeline, shared_ptr<Event> event_p, HashJoinGlobalSinkState &sink_p,
 							 vector<std::tuple<idx_t, idx_t>> tasks, idx_t numa_id)
-	    : TaskNUMA(pipeline.executor, event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {}
+	    : TaskNUMA(pipeline.executor, event_p, numa_id, false), sink(sink_p), tasks(std::move(tasks)) {
+		rest_task = tasks.size();
+	}
 
 	void RegisterInternal() {
 		auto queue = schedule_queue.load(std::memory_order_relaxed);
 		queue->semaphore[numa_id].signal(MinValue<idx_t>(tasks.size(), thread_count / 2));
-		queue->AddSteal(numa_id, MinValue<idx_t>(tasks.size(), thread_count / 2));
+		if (tasks.size() >= thread_count / 2 * LOCAL_AT_LEAST + STEAL_CHUNKS) {
+			queue->AddSteal(numa_id, (tasks.size() - thread_count / 2 * LOCAL_AT_LEAST) / STEAL_CHUNKS);
+		}
 	}
 
-	TaskExecutionResult Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) override {
-		idx_t task_id;
-		do {
-			task_id = next_task.fetch_add(1, std::memory_order_relaxed);
-			if (task_id >= tasks.size()) {
-				return TaskExecutionResult::TASK_FINISHED;
-			}
-			auto [chunk_idx_from, chunk_idx_to] = tasks[task_id];
-			sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, true);
-			if (finished_task.fetch_add(1, std::memory_order_acquire) + 1 == tasks.size()) {
-				Finish();
-				return TaskExecutionResult::TASK_FINISHED;
-			}
-		} while (mode == TaskNUMAExecutionMode::PROCESS_LOCAL);
-		if (task_id + thread_count / 2 < tasks.size()) {
-			schedule_queue.load(std::memory_order_relaxed)->semaphore[numa_id ^ 1].signal(1);
+	TaskExecutionResult ExecuteInternal() {
+		auto task_id = next_task.fetch_add(1, std::memory_order_relaxed);
+		if (task_id >= tasks.size()) {
+			return TaskExecutionResult::TASK_FINISHED;
+		}
+		auto [chunk_idx_from, chunk_idx_to] = tasks[task_id];
+		sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, true);
+		if (finished_task.fetch_add(1, std::memory_order_acquire) + 1 == tasks.size()) {
+			Finish();
+			return TaskExecutionResult::TASK_FINISHED;
 		}
 		return TaskExecutionResult::TASK_NOT_FINISHED;
 	}
 
-	bool TrySteal() override { return true; }
+	TaskExecutionResult Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) override {
+		idx_t total_tasks;
+		if (mode == TaskNUMAExecutionMode::PROCESS_LOCAL) {
+			total_tasks = NumericLimits<idx_t>::Maximum();
+		} else {
+			total_tasks = STEAL_CHUNKS;
+		}
+		for (idx_t i = 0; i < total_tasks; i++) {
+			if (mode == TaskNUMAExecutionMode::PROCESS_LOCAL) {
+				rest_task.fetch_sub(1, std::memory_order_relaxed);
+			}
+			if (ExecuteInternal() == TaskExecutionResult::TASK_FINISHED) {
+				return TaskExecutionResult::TASK_FINISHED;
+			}
+		}
+
+		return TaskExecutionResult::TASK_NOT_FINISHED;
+	}
+
+	bool TrySteal() override {
+		auto rest = rest_task.load(std::memory_order_relaxed);
+		do {
+			if (rest < thread_count / 2 * LOCAL_AT_LEAST + STEAL_CHUNKS) {
+				return false;
+			}
+		} while (!rest_task.compare_exchange_weak(rest, rest - STEAL_CHUNKS, std::memory_order_relaxed));
+		return true;
+	}
 
 private:
 	HashJoinGlobalSinkState &sink;
 	vector<std::tuple<idx_t, idx_t>> tasks;
 	std::atomic<idx_t> next_task{0};
 	std::atomic<idx_t> finished_task{0};
+	std::atomic<idx_t> rest_task;
 };
 
 class HashJoinFinalizeEvent : public BasePipelineEvent {
