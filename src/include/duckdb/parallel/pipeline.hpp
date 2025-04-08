@@ -66,6 +66,10 @@ public:
 	bool TryLocal() override;
 	bool TrySteal() override;
 
+	void FinishInput();
+
+	void AddChunks(idx_t num_chunk);
+
 private:
 	void FinishExecutor(PipelineExecutor *executor);
 

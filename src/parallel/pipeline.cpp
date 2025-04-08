@@ -17,6 +17,13 @@
 
 namespace duckdb {
 
+static idx_t StealCount(idx_t chunks) {
+	if (chunks >= thread_count / 2 * LOCAL_AT_LEAST + STEAL_CHUNKS) {
+		return MinValue<idx_t>(thread_count / 2, ((chunks - thread_count / 2 * LOCAL_AT_LEAST) / STEAL_CHUNKS));
+	}
+	return 0;
+}
+
 PipelineTask::PipelineTask(Pipeline &pipeline_p, shared_ptr<Event> event_p)
     : ExecutorTask(pipeline_p.executor, std::move(event_p)), pipeline(pipeline_p) {
 }
@@ -70,11 +77,18 @@ PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event
 								   PhysicalPipelineBreaker *breaker_source_p)
 	: TaskNUMA(pipeline_p.executor, std::move(event_p), numa_id, is_final_task), pipeline(pipeline_p) {
 	Printer::PrintF("breaker source %d %f", numa_id, GetNow() - numa_test_start);
-	rest_chunk = 10000000;
-	input_finished = true;
+	rest_chunk = 0;
+	input_finished = false;
 	for (auto &i : executors) {
 		i.store(nullptr);
 	}
+	breaker_source_p->pipeline_task.store(this);
+	auto buffered_status = breaker_source_p->buffered_chunks->fetch_or(PhysicalPipelineBreaker::SET_TASK_TAG);
+	if (buffered_status & PhysicalPipelineBreaker::INPUT_FINISH_TAG) {
+		buffered_status -= PhysicalPipelineBreaker::INPUT_FINISH_TAG;
+		FinishInput();
+	}
+	AddChunks(buffered_status);
 }
 
 PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task,
@@ -92,9 +106,7 @@ void PipelineTaskNUMA::RegisterInternal() {
 	auto queue = schedule_queue.load();
 	auto chunks = rest_chunk.load();
 	queue->semaphore[numa_id].signal(MinValue<idx_t>(thread_count / 2, chunks));
-	if (chunks >= thread_count / 2 * LOCAL_AT_LEAST + STEAL_CHUNKS) {
-		queue->AddSteal(numa_id, MinValue<idx_t>(thread_count / 2, ((chunks - thread_count / 2 * LOCAL_AT_LEAST) / STEAL_CHUNKS)));
-	}
+	queue->AddSteal(numa_id, StealCount(chunks));
 }
 
 bool PipelineTaskNUMA::TryLocal() {
@@ -148,7 +160,7 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 			delete executor_ptr;
 			finish_tag = true;
 		} else if (result == PipelineExecuteResult::NOT_FINISHED) {
-			if (rest_chunk >= thread_count / 2 * LOCAL_AT_LEAST + STEAL_CHUNKS) {
+			if (StealCount(rest_chunk) != 0) {
 				schedule_queue.load()->AddSteal(numa_id, 1);
 			}
 		} else {
@@ -205,6 +217,20 @@ void PipelineTaskNUMA::FinishExecutor(PipelineExecutor *executor) {
 	if (rest_tasks == PREPARE_FINISH) {
 		Finish();
 	}
+}
+
+void PipelineTaskNUMA::AddChunks(idx_t num_chunks) {
+	auto chunks = rest_chunk.fetch_add(num_chunks) + num_chunks;
+	auto queue = schedule_queue.load();
+	if (queue != nullptr) {
+		queue->semaphore[numa_id].signal(num_chunks);
+		queue->AddSteal(numa_id, StealCount(chunks) - StealCount(chunks - num_chunks));
+	}
+}
+
+void PipelineTaskNUMA::FinishInput() {
+	input_finished.store(true);
+	AddChunks(1);
 }
 
 Pipeline::Pipeline(Executor &executor_p)

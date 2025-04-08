@@ -21,6 +21,7 @@
 namespace duckdb {
 
 class ChunkBuffer;
+class PipelineTaskNUMA;
 
 struct BreakerChunkReference {
 	shared_ptr<ChunkBuffer> buffer;
@@ -28,23 +29,22 @@ struct BreakerChunkReference {
 };
 
 typedef duckdb_moodycamel::ConcurrentQueue<BreakerChunkReference> concurrent_chunk_queue_t;
-typedef duckdb_moodycamel::LightweightSemaphore lightweight_semaphore_t;
 
 struct ConcurrentChunkQueue {
 public:
 	void Enqueue(BreakerChunkReference &&chunk_ref);
 	bool TryDequeue(BreakerChunkReference &chunk_ref);
-	void Finalize();
 
 private:
 	concurrent_chunk_queue_t q;
-	lightweight_semaphore_t semaphore;
 };
 
 //! PhysicalPipelineBreaker represents a physical operator that is used to break up pipelines
 class PhysicalPipelineBreaker : public PhysicalOperator {
 public:
 	static constexpr const PhysicalOperatorType TYPE = PhysicalOperatorType::PIPELINE_BREAKER;
+	static constexpr const idx_t SET_TASK_TAG = static_cast<idx_t>(1) << 63;
+	static constexpr const idx_t INPUT_FINISH_TAG = static_cast<idx_t>(1) << 62;
 
 public:
 	PhysicalPipelineBreaker(vector<LogicalType> types, unique_ptr<PhysicalOperator> join, idx_t estimated_cardinality);
@@ -80,6 +80,10 @@ public:
 	bool ParallelSource() const override {
 		return true;
 	}
+
+	atomic<PipelineTaskNUMA*> pipeline_task;
+
+	unique_ptr<atomic<idx_t>> buffered_chunks;
 
 public:
 	void BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) override;

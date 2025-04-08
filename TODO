@@ -1,6 +1,6 @@
 Support TaskNUMA for PipelineEvent - OK
-Add trigger to Pipeline Breaker
-Add stealable check
-Add steal
+Add trigger to Pipeline Breaker - OK
+Add stealable check - OK
+Add steal - OK
 
 Memory leak

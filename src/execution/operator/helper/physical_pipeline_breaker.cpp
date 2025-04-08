@@ -45,26 +45,19 @@ private:
 };
 
 void ConcurrentChunkQueue::Enqueue(BreakerChunkReference &&chunk_ref) {
-	if (q.enqueue(std::move(chunk_ref))) {
-		semaphore.signal();
-	} else {
+	if (!q.enqueue(std::move(chunk_ref))) {
 		throw InternalException("Could not enqueue datachunk!");
 	}
 }
 
 bool ConcurrentChunkQueue::TryDequeue(BreakerChunkReference &chunk_ref) {
-	semaphore.wait();
 	return q.try_dequeue(chunk_ref);
-}
-
-void ConcurrentChunkQueue::Finalize() {
-	semaphore.signal(96);
 }
 
 PhysicalPipelineBreaker::PhysicalPipelineBreaker(vector<LogicalType> types, unique_ptr<PhysicalOperator> child_operator,
                                                  idx_t estimated_cardinality)
     : PhysicalOperator(PhysicalOperatorType::PIPELINE_BREAKER, std::move(types), estimated_cardinality),
-	  chunk_queue(make_uniq<ConcurrentChunkQueue>()) {
+	  chunk_queue(make_uniq<ConcurrentChunkQueue>()), buffered_chunks(make_uniq<std::atomic<idx_t>>(0)){
 	children.push_back(std::move(child_operator));
 }
 
@@ -94,6 +87,9 @@ SinkResultType PhysicalPipelineBreaker::Sink(ExecutionContext &context, DataChun
 	while (lstate.added_chunk + 1 < lstate.buffer->ChunkCount()) {
 		BreakerChunkReference chunk_ref{lstate.buffer, std::move(lstate.buffer->FetchChunkMeta(lstate.added_chunk))};
 		chunk_queue->Enqueue(std::move(chunk_ref));
+		if (buffered_chunks->fetch_add(1) & SET_TASK_TAG) {
+			pipeline_task.load()->AddChunks(1);
+		}
 		lstate.added_chunk++;
 	}
 	return SinkResultType::NEED_MORE_INPUT;
@@ -104,6 +100,9 @@ SinkCombineResultType PhysicalPipelineBreaker::Combine(ExecutionContext &context
 	while (lstate.added_chunk < lstate.buffer->ChunkCount()) {
 		BreakerChunkReference chunk_ref{lstate.buffer, std::move(lstate.buffer->FetchChunkMeta(lstate.added_chunk))};
 		chunk_queue->Enqueue(std::move(chunk_ref));
+		if (buffered_chunks->fetch_add(1) & SET_TASK_TAG) {
+			pipeline_task.load()->AddChunks(1);
+		}
 		lstate.added_chunk++;
 	}
 	return SinkCombineResultType::FINISHED;
@@ -112,7 +111,9 @@ SinkCombineResultType PhysicalPipelineBreaker::Combine(ExecutionContext &context
 SinkFinalizeType PhysicalPipelineBreaker::Finalize(Pipeline &pipeline, Event &event,
                                                    ClientContext &context,
                                                    OperatorSinkFinalizeInput &input) const {
-	chunk_queue->Finalize();
+	if (buffered_chunks->fetch_or(INPUT_FINISH_TAG) & SET_TASK_TAG) {
+		pipeline_task.load()->FinishInput();
+	}
 	return SinkFinalizeType::READY;
 }
 
