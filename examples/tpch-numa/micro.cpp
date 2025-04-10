@@ -1,4 +1,5 @@
 #include "duckdb.hpp"
+#include "duckdb/common/numa_config.hpp"
 #include "ittnotify.h"
 
 #include <fstream>
@@ -6,31 +7,6 @@
 #include <sys/time.h>
 
 using namespace duckdb;
-
-int print_tag = 0;
-int numa_tag = 0;
-int parallel_build_tag = 0;
-int split_probe_tag = 0;
-int debug_tag = 0;
-double query_start;
-double prepare_payloads_end;
-double init_pointer_table_end;
-double build_end;
-double first_probe_end;
-double combine_end;
-double probe_end;
-double total_time;
-
-int probe_type = 0;
-std::atomic<double> first_probe_time;
-std::atomic<double> second_probe_time;
-std::atomic<double> first_probe_calc_time;
-std::atomic<double> second_probe_calc_time;
-std::atomic<double> pipeline_breaker_time;
-
-int split_probe_rest;
-
-std::atomic<int> current_build_id;
 
 double GetNow() {
 	struct timeval tv;
@@ -40,7 +16,6 @@ double GetNow() {
 
 double RunQuery(Connection &con, std::string query) {
 	auto query_start = GetNow();
-	split_probe_rest = split_probe_tag;
 	con.Query(query);
 	auto query_end = GetNow();
 	return query_end - query_start;
@@ -50,8 +25,7 @@ std::string Query(int, int, int, float, float, int);
 
 int main(int argc, char *argv[]) {
 	std::string thread = argv[1];
-	split_probe_tag = atoi(argv[2]);
-	debug_tag = 1;
+	split_probe_rest_start = atoi(argv[2]);
 
 	int build_size = atoi(argv[3]);
 	int build_size_2 = atoi(argv[4]);
@@ -79,7 +53,6 @@ int main(int argc, char *argv[]) {
 			std::cout << time_usage << "\n";
 		}
 	}
-	abort();
 }
 
 std::string Query(int build_size, int build_size_2, int probe_size, float sel1, float sel2, int payload_size) {
