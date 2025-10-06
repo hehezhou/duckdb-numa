@@ -32,6 +32,7 @@ public:
 	}
 
 public:
+	int numa_number = 1;
 	ClientContext &context;
 	const PhysicalHashJoin &op;
 
@@ -41,6 +42,7 @@ public:
 
 	//! Global HT used by the join
 	unique_ptr<JoinHashTable> hash_table;
+	vector<unique_ptr<JoinHashTable>> numa_local_hash_tables;
 	//! The perfect hash join executor (if any)
 	unique_ptr<PerfectHashJoinExecutor> perfect_join_executor;
 	//! Whether or not the hash table has been finalized
@@ -56,6 +58,7 @@ public:
 
 	//! Hash tables built by each thread
 	vector<unique_ptr<JoinHashTable>> local_hash_tables;
+	vector<int> numa_id_ht;
 
 	//! Excess probe data gathered during Sink
 	vector<LogicalType> probe_types;

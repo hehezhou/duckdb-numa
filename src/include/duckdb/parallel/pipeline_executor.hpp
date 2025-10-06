@@ -113,6 +113,8 @@ private:
 	//! Whether the current flushing_idx should be flushed: this needs to be stored to make flushing code re-entrant
 	bool should_flush_current_idx = true;
 
+	int numa_node = -1;
+
 private:
 	void StartOperator(PhysicalOperator &op);
 	void EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk);

@@ -2,6 +2,7 @@
 
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
 #include "duckdb/execution/operator/helper/physical_pipeline_breaker.hpp"
+#include "duckdb/execution/operator/helper/physical_partitioner.hpp"
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 
@@ -49,10 +50,34 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 	meta_pipeline.GetPipelines(pipelines_so_far, false);
 	auto &last_pipeline = *pipelines_so_far.back();
 
+	auto &hash_join = op.Cast<PhysicalHashJoin>();
+	auto &cond = hash_join.conditions[0];
+
+	// === Build Side Partition ===
 	if (build_rhs) {
-		// on the RHS (build side), we construct a child MetaPipeline with this operator as its sink
+		// 在build side插入partitioner
+		// 构造partitioner，假设op.children[1]为build input
+
+		auto *build_child = op.children[1].get();
+		vector<LogicalType> build_types = build_child->types;
+		idx_t build_card = build_child->estimated_cardinality;
+		// 这里partition_key需要你根据实际情况传入
+		unique_ptr<Expression> build_partition_key= cond.right->Copy();
+		auto build_partitioner = make_uniq<PhysicalPartitioner>(build_types, std::move(op.children[1]), build_card, std::move(build_partition_key));
+		// 用partitioner替换build input
+		op.children[1] = std::move(build_partitioner);
+		// 构建child pipeline
 		auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, op, MetaPipelineType::JOIN_BUILD);
 		child_meta_pipeline.Build(*op.children[1]);
+	}
+
+	// === Probe Side Partition === (TODO: if child is join and same join key, skip partitoner)
+	{
+		vector<LogicalType> probe_types = op.children[0]->types;
+		idx_t probe_card = op.children[0]->estimated_cardinality;
+		unique_ptr<Expression> probe_partition_key = cond.left->Copy();
+		auto probe_partitioner = make_uniq<PhysicalPartitioner>(probe_types, std::move(op.children[0]), probe_card, std::move(probe_partition_key));
+		op.children[0] = std::move(probe_partitioner);
 	}
 
 	// NUMATODO: config

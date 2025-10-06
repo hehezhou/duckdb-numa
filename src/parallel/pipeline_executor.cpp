@@ -2,7 +2,8 @@
 
 #include "duckdb/common/limits.hpp"
 #include "duckdb/main/client_context.hpp"
-
+#include <numa.h>
+#include <sched.h>
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
 #include <chrono>
 #include <thread>
@@ -13,6 +14,22 @@ namespace duckdb {
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
+	if (
+	    (pipeline.GetSource()->type == PhysicalOperatorType::TABLE_SCAN ||
+	     pipeline.GetSource()->type == PhysicalOperatorType::PARTITIONER) &&
+	    pipeline.GetSink()->type != PhysicalOperatorType::CREATE_TABLE_AS) {
+
+		std::cout << " " << pipeline.ToString() << std::endl;
+		// get thread's numa id
+		
+
+		int cpu = sched_getcpu(); // 获取当前线程运行在哪个CPU core
+		int numa_id = numa_node_of_cpu(cpu); // 获取该CPU core属于哪个NUMA节点
+		// std::cout<<"thread cpu:"<<cpu<<", numa_id:"<<numa_id<<std::endl;
+		numa_node = numa_id;
+		
+	}
+
 	if (pipeline.sink) {
 		local_sink_state = pipeline.sink->GetLocalSinkState(context);
 		requires_batch_index = pipeline.sink->RequiresBatchIndex() && pipeline.source->SupportsBatchIndex();
@@ -332,7 +349,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 
 	// Run the combine for the sink
 	OperatorSinkCombineInput combine_input {*pipeline.sink->sink_state, *local_sink_state, interrupt_state};
-
+	combine_input.numa_id = numa_node;
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
 	if (debug_blocked_combine_count < debug_blocked_target_count) {
 		debug_blocked_combine_count++;
@@ -347,6 +364,7 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 		return PipelineExecuteResult::INTERRUPTED;
 	}
 #endif
+	// std::cout<<"Numa id in Combine: "<<combine_input.numa_id<<std::endl;
 	auto result = pipeline.sink->Combine(context, combine_input);
 
 	if (result == SinkCombineResultType::BLOCKED) {
@@ -499,8 +517,9 @@ SinkResultType PipelineExecutor::Sink(DataChunk &chunk, OperatorSinkInput &input
 
 SourceResultType PipelineExecutor::FetchFromSource(DataChunk &result) {
 	StartOperator(*pipeline.source);
-
+	
 	OperatorSourceInput source_input = {*pipeline.source_state, *local_source_state, interrupt_state};
+	source_input.numa_id = numa_node;
 	auto res = GetData(result, source_input);
 
 	// Ensures Sinks only return empty results when Blocking or Finished

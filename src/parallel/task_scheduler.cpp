@@ -23,6 +23,8 @@
 #include <unistd.h>
 #endif
 
+extern int socket0_cpus = 48;
+
 namespace duckdb {
 
 struct SchedulerThread {
@@ -49,8 +51,8 @@ struct ConcurrentQueue {
 	bool DequeueFromProducer(ProducerToken &token, shared_ptr<Task> &task);
 	bool Dequeue(shared_ptr<Task> &task, idx_t cpu_id);
 	void SignAll(idx_t n) {
-		semaphore.signal(static_cast<size_t>(n / 2));
-		semaphore_2.signal(static_cast<size_t>((n + 1) / 2));
+		semaphore.signal(static_cast<size_t>(n));
+		semaphore_2.signal(static_cast<size_t>(n));
 	}
 };
 
@@ -296,12 +298,30 @@ void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
 }
 
 #ifndef DUCKDB_NO_THREADS
-static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker, int cpu_id) {
-	cpu_set_t cpu_mask;
-	CPU_ZERO(&cpu_mask);
-	CPU_SET(cpu_id, &cpu_mask);
-	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
-	scheduler->ExecuteForever(marker, cpu_id);
+// static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker, int cpu_id) {
+// 	cpu_set_t cpu_mask;
+// 	CPU_ZERO(&cpu_mask);
+// 	CPU_SET(cpu_id, &cpu_mask);
+// 	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
+// 	scheduler->ExecuteForever(marker, cpu_id);
+// }
+static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker, idx_t cpu_id) {
+	if (cpu_id < socket0_cpus + 48) {
+		if (cpu_id < socket0_cpus) {
+			cpu_id *= 2;
+		} else {
+			cpu_id -= socket0_cpus;
+			cpu_id *= 2;
+			cpu_id += 1;
+		}
+		// std::cout<<cpu_id<<std::endl;
+		cpu_set_t cpu_mask;
+		CPU_ZERO(&cpu_mask);
+		CPU_SET(cpu_id, &cpu_mask);
+		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
+	}
+
+	scheduler->ExecuteForever(marker);
 }
 #endif
 

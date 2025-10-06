@@ -20,6 +20,7 @@
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
+#include <numa.h>
 
 namespace duckdb {
 
@@ -158,8 +159,12 @@ HashJoinGlobalSinkState::HashJoinGlobalSinkState(const PhysicalHashJoin &op_p, C
     : context(context_p), op(op_p),
       num_threads(NumericCast<idx_t>(TaskScheduler::GetScheduler(context).NumberOfThreads())),
       temporary_memory_state(TemporaryMemoryManager::Get(context).Register(context)), finalized(false),
-      active_local_states(0), total_size(0), max_partition_size(0), max_partition_count(0), scanned_data(false) {
+      active_local_states(0), total_size(0), max_partition_size(0), max_partition_count(0), scanned_data(false),numa_number(2) {
 	hash_table = op.InitializeHashTable(context);
+	numa_local_hash_tables.resize(numa_number);
+	for (idx_t i = 0; i < numa_local_hash_tables.size(); i++) {
+		numa_local_hash_tables[i] = op.InitializeHashTable(context);
+	}
 
 	// For perfect hash join
 	perfect_join_executor = make_uniq<PerfectHashJoinExecutor>(op, *hash_table, op.perfect_join_statistics);
@@ -287,6 +292,7 @@ SinkCombineResultType PhysicalHashJoin::Combine(ExecutionContext &context, Opera
 	lstate.hash_table->GetSinkCollection().FlushAppendState(lstate.append_state);
 	auto guard = gstate.Lock();
 	gstate.local_hash_tables.push_back(std::move(lstate.hash_table));
+	gstate.numa_id_ht.push_back(input.numa_id);
 	if (gstate.local_hash_tables.size() == gstate.active_local_states) {
 		// Set to 0 until PrepareFinalize
 		gstate.temporary_memory_state->SetZero();
@@ -337,6 +343,7 @@ void PhysicalHashJoin::PrepareFinalize(ClientContext &context, GlobalSinkState &
 	auto &ht = *gstate.hash_table;
 	gstate.total_size =
 	    ht.GetTotalSize(gstate.local_hash_tables, gstate.max_partition_size, gstate.max_partition_count);
+	std::cout<<"TOTAL HT SIZE: "<<gstate.total_size<<std::endl;
 	bool all_constant;
 	gstate.temporary_memory_state->SetMaterializationPenalty(GetTupleWidth(children[0]->types, all_constant));
 	gstate.temporary_memory_state->SetRemainingSize(gstate.total_size);
@@ -345,12 +352,23 @@ void PhysicalHashJoin::PrepareFinalize(ClientContext &context, GlobalSinkState &
 class HashJoinTableInitTask : public ExecutorTask {
 public:
 	HashJoinTableInitTask(shared_ptr<Event> event_p, ClientContext &context, HashJoinGlobalSinkState &sink_p,
-	                      idx_t entry_idx_from_p, idx_t entry_idx_to_p, const PhysicalOperator &op_p)
+	                      idx_t entry_idx_from_p, idx_t entry_idx_to_p, const PhysicalOperator &op_p, int numa_id = -1)
 	    : ExecutorTask(context, std::move(event_p), op_p), sink(sink_p), entry_idx_from(entry_idx_from_p),
-	      entry_idx_to(entry_idx_to_p) {
+	      entry_idx_to(entry_idx_to_p), numa_id(numa_id) {
 	}
 
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
+		if(sink.numa_local_hash_tables.size()>=1){
+			
+			auto &ht_numa = *sink.numa_local_hash_tables[numa_id];
+			ht_numa.InitializePointerTable(entry_idx_from, entry_idx_to);
+			event->FinishTask();
+				
+			
+			return TaskExecutionResult::TASK_FINISHED;
+		}
+		
+
 		sink.hash_table->InitializePointerTable(entry_idx_from, entry_idx_to);
 		event->FinishTask();
 		return TaskExecutionResult::TASK_FINISHED;
@@ -360,6 +378,7 @@ private:
 	HashJoinGlobalSinkState &sink;
 	idx_t entry_idx_from;
 	idx_t entry_idx_to;
+	int numa_id;
 };
 
 
@@ -376,6 +395,39 @@ public:
 		auto &context = pipeline->GetClientContext();
 
 		vector<shared_ptr<Task>> finalize_tasks;
+		if(sink.numa_local_hash_tables.size()>=1){
+			for(int i=0;i<sink.numa_local_hash_tables.size();i++){
+				auto &ht = *sink.numa_local_hash_tables[i];
+				const auto entry_count = ht.capacity;
+				auto num_threads = NumericCast<idx_t>(sink.num_threads);
+				if (num_threads == 1 || (entry_count < PARALLEL_CONSTRUCT_THRESHOLD && !context.config.verify_parallelism)) {
+					// Single-threaded finalize
+					finalize_tasks.push_back(
+						make_uniq<HashJoinTableInitTask>(shared_from_this(), context, sink, 0U, entry_count, sink.op, i));
+				} else {
+					// Parallel finalize
+					auto entries_per_thread = MaxValue<idx_t>((entry_count + num_threads - 1) / num_threads, 1);
+
+					idx_t entry_idx = 0;
+					for (idx_t thread_idx = 0; thread_idx < num_threads; thread_idx++) {
+						auto entry_idx_from = entry_idx;
+						auto entry_idx_to = MinValue<idx_t>(entry_idx_from + entries_per_thread, entry_count);
+						finalize_tasks.push_back(make_uniq<HashJoinTableInitTask>(shared_from_this(), context, sink,
+																				entry_idx_from, entry_idx_to, sink.op, i));
+						entry_idx = entry_idx_to;
+						if (entry_idx == entry_count) {
+							break;
+						}
+					}
+				}
+			
+			}
+			SetTasksNUMA(std::move(finalize_tasks), 0);
+			
+			return;
+		}
+		
+		// vector<shared_ptr<Task>> finalize_tasks;
 		auto &ht = *sink.hash_table;
 		const auto entry_count = ht.capacity;
 		auto num_threads = NumericCast<idx_t>(sink.num_threads);
@@ -408,12 +460,20 @@ public:
 class HashJoinFinalizeTask : public ExecutorTask {
 public:
 	HashJoinFinalizeTask(shared_ptr<Event> event_p, ClientContext &context, HashJoinGlobalSinkState &sink_p,
-	                     idx_t chunk_idx_from_p, idx_t chunk_idx_to_p, bool parallel_p, const PhysicalOperator &op_p)
+	                     idx_t chunk_idx_from_p, idx_t chunk_idx_to_p, bool parallel_p, const PhysicalOperator &op_p, int numa_id = -1)
 	    : ExecutorTask(context, std::move(event_p), op_p), sink(sink_p), chunk_idx_from(chunk_idx_from_p),
-	      chunk_idx_to(chunk_idx_to_p), parallel(parallel_p) {
+	      chunk_idx_to(chunk_idx_to_p), parallel(parallel_p), numa_id(numa_id) {
 	}
 
 	TaskExecutionResult ExecuteTask(TaskExecutionMode mode) override {
+		if(sink.numa_local_hash_tables.size()>=1){
+			
+			auto &ht = *sink.numa_local_hash_tables[numa_id];
+			ht.Finalize(chunk_idx_from, chunk_idx_to, parallel);
+			event->FinishTask();
+			return TaskExecutionResult::TASK_FINISHED;
+		
+		}
 		sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, parallel);
 
 		event->FinishTask();
@@ -425,6 +485,7 @@ private:
 	idx_t chunk_idx_from;
 	idx_t chunk_idx_to;
 	bool parallel;
+	int numa_id;
 };
 
 class HashJoinFinalizeEvent : public BasePipelineEvent {
@@ -440,6 +501,42 @@ public:
 		auto &context = pipeline->GetClientContext();
 
 		vector<shared_ptr<Task>> finalize_tasks;
+		if(sink.numa_local_hash_tables.size()>=1){
+			for(int i=0;i<sink.numa_local_hash_tables.size();i++){
+				
+				auto &ht = *sink.numa_local_hash_tables[i];
+				const auto chunk_count = ht.GetDataCollection().ChunkCount();
+				// const auto num_threads = NumericCast<idx_t>(sink.num_threads);
+				auto num_threads = NumericCast<idx_t>(sink.num_threads);
+				if (num_threads == 1 || (ht.Count() < PARALLEL_CONSTRUCT_THRESHOLD && !context.config.verify_parallelism)) {
+					// Single-threaded finalize
+					finalize_tasks.push_back(
+						make_uniq<HashJoinFinalizeTask>(shared_from_this(), context, sink, 0U, chunk_count, false, sink.op,i));
+				} else {
+					// Parallel finalize
+					auto chunks_per_thread = MaxValue<idx_t>((chunk_count + num_threads - 1) / num_threads, 1);
+
+					idx_t chunk_idx = 0;
+					for (idx_t thread_idx = 0; thread_idx < num_threads; thread_idx++) {
+						auto chunk_idx_from = chunk_idx;
+						auto chunk_idx_to = MinValue<idx_t>(chunk_idx_from + chunks_per_thread, chunk_count);
+						finalize_tasks.push_back(make_uniq<HashJoinFinalizeTask>(shared_from_this(), context, sink,
+																				chunk_idx_from, chunk_idx_to, true, sink.op, i));
+						chunk_idx = chunk_idx_to;
+						if (chunk_idx == chunk_count) {
+							break;
+						}
+					}
+				}
+				
+					
+			}
+			SetTasksNUMA(std::move(finalize_tasks), 0);
+			
+			return;
+		}
+
+		// vector<shared_ptr<Task>> finalize_tasks;
 		auto &ht = *sink.hash_table;
 		const auto chunk_count = ht.GetDataCollection().ChunkCount();
 		// const auto num_threads = NumericCast<idx_t>(sink.num_threads);
@@ -468,6 +565,14 @@ public:
 	}
 
 	void FinishEvent() override {
+		if(sink.numa_local_hash_tables.size()>=1){
+			for(idx_t i=0;i<sink.numa_local_hash_tables.size();i++){
+				auto &ht = *sink.numa_local_hash_tables[i];
+				ht.GetDataCollection().VerifyEverythingPinned();
+				ht.finalized = true;
+			}
+			return;
+		}
 		sink.hash_table->GetDataCollection().VerifyEverythingPinned();
 		sink.hash_table->finalized = true;
 	}
@@ -476,6 +581,19 @@ public:
 };
 
 void HashJoinGlobalSinkState::ScheduleFinalize(Pipeline &pipeline, Event &event) {
+	if(numa_local_hash_tables.size()>=1){
+		for(idx_t i=0;i<numa_local_hash_tables.size();i++){
+			std::cout<<"NUMA HT "<<i<<" SIZE: "<<numa_local_hash_tables[i]->Count()<<std::endl;
+			numa_local_hash_tables[i]->AllocatePointerTable();
+			
+		}
+		auto new_init_event = make_shared_ptr<HashJoinTableInitEvent>(pipeline, *this);
+		event.InsertEvent(new_init_event);
+
+		auto new_finalize_event = make_shared_ptr<HashJoinFinalizeEvent>(pipeline, *this);
+		new_init_event->InsertEvent(std::move(new_finalize_event));
+		return;
+	}
 	if (hash_table->Count() == 0) {
 		hash_table->finalized = true;
 		return;
@@ -668,8 +786,25 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 	}
 
 	// In-memory Hash Join
-	for (auto &local_ht : sink.local_hash_tables) {
-		ht.Merge(*local_ht);
+	if(sink.numa_id_ht.size() > 0&& sink.numa_local_hash_tables.size() >=1) {
+		// Merge NUMA-local hash tables into a single global hash table
+		for(idx_t i = 0; i < sink.local_hash_tables.size(); i++) {
+			auto numa_id = sink.numa_id_ht[i];
+			auto &ht_numa = *sink.numa_local_hash_tables[numa_id];
+			ht_numa.Merge(*sink.local_hash_tables[i]);
+		}
+		for(auto &tmp : sink.numa_local_hash_tables) {
+			tmp->Unpartition();
+		}
+		if (filter_pushdown && sink.numa_local_hash_tables[0]->Count() > 0) {
+			filter_pushdown->PushFilters(*sink.global_filter_state, *this);
+		}
+		
+	}
+	else{
+		for (auto &local_ht : sink.local_hash_tables) {
+			ht.Merge(*local_ht);
+		}
 	}
 	sink.local_hash_tables.clear();
 	ht.Unpartition();
@@ -691,7 +826,7 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 		sink.ScheduleFinalize(pipeline, event);
 	}
 	sink.finalized = true;
-	if (ht.Count() == 0 && EmptyResultIfRHSIsEmpty()) {
+	if (ht.Count() == 0 && EmptyResultIfRHSIsEmpty()&& sink.numa_local_hash_tables.size() ==0) {
 		return SinkFinalizeType::NO_OUTPUT_POSSIBLE;
 	}
 	return SinkFinalizeType::READY;
@@ -703,8 +838,10 @@ SinkFinalizeType PhysicalHashJoin::Finalize(Pipeline &pipeline, Event &event, Cl
 class HashJoinOperatorState : public CachingOperatorState {
 public:
 	explicit HashJoinOperatorState(ClientContext &context, HashJoinGlobalSinkState &sink)
-	    : probe_executor(context), scan_structure(*sink.hash_table, join_key_state) {
-	}
+	    : probe_executor(context), scan_structure(sink.numa_local_hash_tables.size() >= 1
+            ? JoinHashTable::ScanStructure(*sink.numa_local_hash_tables[numa_node_of_cpu(sched_getcpu())], join_key_state)
+            : JoinHashTable::ScanStructure(*sink.hash_table, join_key_state)
+      ){}
 
 	DataChunk join_keys;
 	TupleDataChunkState join_key_state;
@@ -752,6 +889,46 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 	D_ASSERT(sink.finalized);
 	D_ASSERT(!sink.scanned_data);
 
+	if(sink.numa_local_hash_tables.size() > 0) {
+		// Switch to the NUMA-local hash table
+		int cpu = sched_getcpu();
+		int numa_id = numa_node_of_cpu(cpu); 
+		auto &ht_numa = sink.numa_local_hash_tables[numa_id];
+		auto &data_collection = ht_numa->GetDataCollection();
+		// std::cout<<"Using hash table on NUMA node "<<numa_id<<" for probe "<<ht_numa->Count()<<std::endl;
+		
+		if (ht_numa->Count() == 0) {
+			if (EmptyResultIfRHSIsEmpty()) {
+				return OperatorResultType::FINISHED;
+			}
+			ConstructEmptyJoinResult(ht_numa->join_type, ht_numa->has_null, input, chunk);
+			return OperatorResultType::NEED_MORE_INPUT;
+		}
+		if (state.scan_structure.is_null) {
+			// probe the HT, start by resolving the join keys for the left chunk
+			state.join_keys.Reset();
+			state.probe_executor.Execute(input, state.join_keys);
+			auto vec = FlatVector::GetData<int32_t>(state.join_keys.data[0]);
+
+			// perform the actual probe
+			if (sink.external) {
+				ht_numa->ProbeAndSpill(state.scan_structure, state.join_keys, state.join_key_state,
+											state.probe_state, input, *sink.probe_spill, state.spill_state,
+											state.spill_chunk);
+			} else {
+				ht_numa->Probe(state.scan_structure, state.join_keys, state.join_key_state, state.probe_state);
+			}
+		}
+		state.scan_structure.Next(state.join_keys, input, chunk);
+
+		if (state.scan_structure.PointersExhausted() && chunk.size() == 0) {
+			state.scan_structure.is_null = true;
+			return OperatorResultType::NEED_MORE_INPUT;
+		}
+		return OperatorResultType::HAVE_MORE_OUTPUT;
+		
+	}
+
 	if (sink.hash_table->Count() == 0) {
 		if (EmptyResultIfRHSIsEmpty()) {
 			return OperatorResultType::FINISHED;
@@ -773,7 +950,7 @@ OperatorResultType PhysicalHashJoin::ExecuteInternal(ExecutionContext &context, 
 		state.spill_state = sink.probe_spill->RegisterThread();
 		state.initialized = true;
 	}
-
+	//TODO!!
 	if (state.scan_structure.is_null) {
 		// probe the HT, start by resolving the join keys for the left chunk
 		state.join_keys.Reset();
@@ -1071,11 +1248,14 @@ bool HashJoinGlobalSourceState::AssignTask(HashJoinGlobalSinkState &sink, HashJo
 	}
 	return false;
 }
-
+//numa_node_of_cpu(sched_getcpu())
 HashJoinLocalSourceState::HashJoinLocalSourceState(const PhysicalHashJoin &op, const HashJoinGlobalSinkState &sink,
                                                    Allocator &allocator)
     : local_stage(HashJoinSourceStage::INIT), addresses(LogicalType::POINTER),
-      scan_structure(*sink.hash_table, join_key_state) {
+      scan_structure(sink.numa_local_hash_tables.size() >= 1
+						? JoinHashTable::ScanStructure(*sink.numa_local_hash_tables[numa_node_of_cpu(sched_getcpu())],
+													  join_key_state)
+						: JoinHashTable::ScanStructure(*sink.hash_table, join_key_state)) {
 	auto &chunk_state = probe_local_scan.current_chunk_state;
 	chunk_state.properties = ColumnDataScanProperties::ALLOW_ZERO_COPY;
 
@@ -1204,6 +1384,11 @@ SourceResultType PhysicalHashJoin::GetData(ExecutionContext &context, DataChunk 
 		auto guard = gstate.Lock();
 		if (gstate.global_stage != HashJoinSourceStage::DONE) {
 			gstate.global_stage = HashJoinSourceStage::DONE;
+			if (sink.numa_local_hash_tables.size() > 0) {
+				for(auto &tmp : sink.numa_local_hash_tables) {
+					tmp->Reset();
+				}
+			}
 			sink.hash_table->Reset();
 			sink.temporary_memory_state->SetZero();
 		}
