@@ -76,7 +76,7 @@ TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task,
 								   PhysicalPipelineBreaker *breaker_source_p)
 	: TaskNUMA(pipeline_p.executor, std::move(event_p), numa_id, is_final_task), pipeline(pipeline_p) {
-	Printer::PrintF("breaker source %d %f", numa_id, GetNow() - numa_test_start);
+	// Printer::PrintF("breaker source %d %f", numa_id, GetNow() - numa_test_start);
 	rest_chunk = 0;
 	input_finished = false;
 	for (auto &i : executors) {
@@ -94,7 +94,7 @@ PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event
 PipelineTaskNUMA::PipelineTaskNUMA(Pipeline &pipeline_p, shared_ptr<Event> event_p, idx_t numa_id, bool is_final_task,
 								   idx_t source_chunks)
 	: TaskNUMA(pipeline_p.executor, std::move(event_p), numa_id, is_final_task), pipeline(pipeline_p) {
-	Printer::PrintF("normal source %d %d %f", numa_id, source_chunks, GetNow() - numa_test_start);
+	// Printer::PrintF("normal source %d %d %f", numa_id, source_chunks, GetNow() - numa_test_start);
 	rest_chunk = MaxValue<idx_t>(source_chunks, 48);
 	input_finished = true;
 	for (auto &i : executors) {
@@ -286,6 +286,7 @@ bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
 	if (sink && sink->sink_state) {
 		max_threads = sink->sink_state->MaxThreads(max_threads);
 	}
+	Printer::PrintF("task %d %d %d %f", reinterpret_cast<const uint64_t>(event.get()), numa_id, MinValue<idx_t>(active_threads, max_threads), GetNow() - numa_test_start);
 	return LaunchScanTasks(event, max_threads);
 }
 
@@ -330,7 +331,7 @@ void Pipeline::Schedule(shared_ptr<Event> &event) {
 
 bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
 	// split the scan up into parts and schedule the parts
-	if (max_threads <= 1) {
+	if (max_threads <= 10) {
 		// too small to parallelize
 		return false;
 	}

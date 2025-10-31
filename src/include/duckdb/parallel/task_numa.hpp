@@ -39,8 +39,6 @@ public:
 
 protected:
 	std::atomic<ConcurrentQueue*> schedule_queue{nullptr};
-
-private:
 	Executor &executor;
 	shared_ptr<Event> event;
 	std::atomic<bool> finished{false};

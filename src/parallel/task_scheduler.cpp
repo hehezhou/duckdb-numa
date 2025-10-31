@@ -88,9 +88,12 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 		if (execute_type == DequeueResult::NO_TASK) {
 			continue;
 		}
-		if (cpu_id == 3 || cpu_id == 4 || execute_type == DequeueResult::TASK_NUMA_STEAL) {
-			Printer::PrintF("Task Get %d %d %f", static_cast<int>(cpu_id), static_cast<int>(execute_type), GetNow() - numa_test_start);
-		}
+		// if (cpu_id == 3 || cpu_id == 4 || execute_type == DequeueResult::TASK_NUMA_STEAL) {
+		// 	Printer::PrintF("Task Get %d %d %f", static_cast<int>(cpu_id), static_cast<int>(execute_type), GetNow() - numa_test_start);
+		// }
+		// if (execute_type == DequeueResult::TASK_NORMAL) {
+		// 	Printer::PrintF("Task Get %d %s %d %f", static_cast<int>(cpu_id), typeid(*task).name(), static_cast<int>(execute_type), GetNow() - numa_test_start);
+		// }
 		if (execute_type == DequeueResult::TASK_NORMAL) {
 			auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
 
@@ -108,9 +111,9 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 		} else {
 			abort();
 		}
-		if (cpu_id == 3 || cpu_id == 4 || execute_type == DequeueResult::TASK_NUMA_STEAL) {
-			Printer::PrintF("Task End %d %d %f", static_cast<int>(cpu_id), static_cast<int>(execute_type), GetNow() - numa_test_start);
-		}
+		// if (cpu_id == 3 || cpu_id == 4 || execute_type == DequeueResult::TASK_NUMA_STEAL || execute_type == DequeueResult::TASK_NORMAL) {
+		// 	Printer::PrintF("Task End %d %d %f", static_cast<int>(cpu_id), static_cast<int>(execute_type), GetNow() - numa_test_start);
+		// }
 	}
 	// this thread will exit, flush all of its outstanding allocations
 	if (Allocator::SupportsFlush()) {

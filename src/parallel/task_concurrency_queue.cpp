@@ -45,6 +45,9 @@ DequeueResult ConcurrentQueue::Dequeue(shared_ptr<Task> &task, TaskNUMA* &task_n
     if (q.try_dequeue(task)) {
         return DequeueResult::TASK_NORMAL;
     }
+    if (cpu_id == 94 || cpu_id == 92) {
+        return DequeueResult::NO_TASK;
+    }
     task_numa = current_task_numa[numa_id].load();
     if (task_numa != nullptr && task_numa->TryLocal()) {
         return DequeueResult::TASK_NUMA_LOCAL;

@@ -1,5 +1,6 @@
 #include "duckdb/parallel/pipeline_event.hpp"
 #include "duckdb/execution/executor.hpp"
+#include "duckdb/common/printer.hpp"
 
 namespace duckdb {
 
@@ -20,6 +21,7 @@ void PipelineEvent::Schedule() {
 }
 
 void PipelineEvent::FinishEvent() {
+	Printer::PrintF("task end %d %f", reinterpret_cast<const uint64_t>(this), GetNow() - numa_test_start);
 }
 
 } // namespace duckdb
