@@ -9,7 +9,7 @@
 
 // NUMACONSTANT
 int split_probe_rest;
-int split_probe_rest_start = 4;
+int split_probe_rest_start = 2;
 
 namespace duckdb {
 

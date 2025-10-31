@@ -21,6 +21,8 @@
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
 
+#include "duckdb/common/numa_config.hpp"
+
 namespace duckdb {
 
 PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
@@ -373,6 +375,7 @@ public:
 
 public:
 	void Schedule() override {
+		Printer::PrintF("init task %d %d %f", reinterpret_cast<const uint64_t>(this), pipeline->numa_id, GetNow() - numa_test_start);
 		auto &context = pipeline->GetClientContext();
 
 		vector<shared_ptr<Task>> finalize_tasks;
@@ -401,8 +404,11 @@ public:
 		}
 		SetTasksNUMA(std::move(finalize_tasks), pipeline->numa_id);
 	}
+	void FinishEvent() override {
+		Printer::PrintF("init task end %d %f", reinterpret_cast<const uint64_t>(this), GetNow() - numa_test_start);
+	}
 
-	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
+	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 262144;
 };
 
 class HashJoinFinalizeTask : public ExecutorTask {
@@ -437,6 +443,7 @@ public:
 
 public:
 	void Schedule() override {
+		Printer::PrintF("build task %d %d %f", reinterpret_cast<const uint64_t>(this), pipeline->numa_id, GetNow() - numa_test_start);
 		auto &context = pipeline->GetClientContext();
 
 		vector<shared_ptr<Task>> finalize_tasks;
@@ -470,9 +477,10 @@ public:
 	void FinishEvent() override {
 		sink.hash_table->GetDataCollection().VerifyEverythingPinned();
 		sink.hash_table->finalized = true;
+		Printer::PrintF("build task end %d %f", reinterpret_cast<const uint64_t>(this), GetNow() - numa_test_start);
 	}
 
-	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
+	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 262144;
 };
 
 void HashJoinGlobalSinkState::ScheduleFinalize(Pipeline &pipeline, Event &event) {

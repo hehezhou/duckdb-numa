@@ -18,7 +18,7 @@ key_set_file = ''
 if len(sys.argv)>12:
     key_set_file = sys.argv[12] # real-world data file name, if not None, read the key set from the file
 
-file_path = '/home/yihao/duckdb/duckdb-numa/examples/tpch-numa/script/numa_data/'
+file_path = '/home/hangrui/numa-join/no-steal/examples/tpch-numa/script/numa_data/'
 build1_name = f'build_{build_size}'
 build2_name = f'build2_{build_size_2}'
 probe_name = f'probe_{build_size}_{build_size_2}_{probe_size}_{int(sel1*10000)}_{int(sel2*10000)}_{payload_size}'

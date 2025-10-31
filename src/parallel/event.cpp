@@ -84,7 +84,7 @@ void Event::SetTasks(vector<shared_ptr<Task>> tasks) {
 
 void Event::SetTasksNUMA(vector<shared_ptr<Task>> tasks, int numa_id) {
 	auto &ts = TaskScheduler::GetScheduler(executor.context);
-	std::cerr << "Test " << numa_id << std::endl;
+	// std::cerr << "Test " << numa_id << std::endl;
 	D_ASSERT(total_tasks == 0);
 	D_ASSERT(!tasks.empty());
 	this->total_tasks = tasks.size();

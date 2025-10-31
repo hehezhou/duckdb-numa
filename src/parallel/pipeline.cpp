@@ -13,6 +13,8 @@
 #include "duckdb/parallel/pipeline_executor.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
 
+#include "duckdb/common/numa_config.hpp"
+
 namespace duckdb {
 
 PipelineTask::PipelineTask(Pipeline &pipeline_p, shared_ptr<Event> event_p)
@@ -123,8 +125,12 @@ bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
 	if (max_threads > active_threads) {
 		max_threads = active_threads;
 	}
-	if (max_threads >= 46) {
-		max_threads = 46;
+	Printer::PrintF("task %d %d %d %f", reinterpret_cast<const uint64_t>(event.get()), numa_id, max_threads, GetNow() - numa_test_start);
+	if (numa_id == 0 && max_threads >= active_threads / 2 - 1) {
+		max_threads = active_threads / 2 - 1;
+	}
+	if (numa_id == 1 && max_threads >= active_threads / 2) {
+		max_threads = active_threads / 2;
 	}
 	return LaunchScanTasks(event, max_threads);
 }

@@ -25,10 +25,10 @@ public:
 
 	void SetSource(shared_ptr<RowGroupCollection> mat_table_p, optional_ptr<PhysicalOperator> source_p,
 	               unique_ptr<GlobalSourceState> source_state_p, unique_ptr<LocalSourceState> local_source_state_p) {
-		mat_table = move(mat_table_p);
-		source = move(source_p);
-		source_state = move(source_state_p);
-		local_source_state = move(local_source_state_p);
+		mat_table = std::move(mat_table_p);
+		source = std::move(source_p);
+		source_state = std::move(source_state_p);
+		local_source_state = std::move(local_source_state_p);
 	}
 
 public:
