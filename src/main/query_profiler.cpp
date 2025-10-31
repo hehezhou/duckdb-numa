@@ -5,6 +5,7 @@
 #include "duckdb/common/numeric_utils.hpp"
 #include "duckdb/common/printer.hpp"
 #include "duckdb/common/string_util.hpp"
+#include "duckdb/common/types.hpp"
 #include "duckdb/common/tree_renderer/text_tree_renderer.hpp"
 #include "duckdb/execution/expression_executor.hpp"
 #include "duckdb/execution/operator/helper/physical_execute.hpp"
@@ -356,6 +357,16 @@ void OperatorProfiler::EndOperator(optional_ptr<DataChunk> chunk) {
 			idx_t result_set_size = chunk->GetAllocationSize();
 			curr_operator_info.AddResultSetSize(result_set_size);
 		}
+		if (HasOperatorSetting(MetricsType::DATA_WIDTH) && chunk) {
+			auto types = chunk->GetTypes();
+			if (curr_operator_info.data_width == 0) {
+				idx_t data_width = 0;
+				for (auto type : types) {
+					data_width += GetTypeIdSize(type.GetInternalType());
+				}
+				curr_operator_info.SetDataWidth(data_width);
+			}
+		}
 	}
 	active_operator = nullptr;
 }
@@ -413,6 +424,9 @@ void QueryProfiler::Flush(OperatorProfiler &profiler) {
 		}
 		if (profiler.HasOperatorSetting(MetricsType::RESULT_SET_SIZE)) {
 			tree_node.GetProfilingInfo().AddToMetric<idx_t>(MetricsType::RESULT_SET_SIZE, node.second.result_set_size);
+		}
+		if (profiler.HasOperatorSetting(MetricsType::DATA_WIDTH)) {
+			tree_node.GetProfilingInfo().SetToMetric<idx_t>(MetricsType::DATA_WIDTH, node.second.data_width);
 		}
 	}
 	profiler.timings.clear();

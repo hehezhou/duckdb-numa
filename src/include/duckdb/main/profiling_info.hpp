@@ -83,5 +83,21 @@ public:
 		auto new_value = Value::CreateValue(value);
 		return AddToMetric<METRIC_TYPE>(setting, new_value);
 	}
+
+	template <class METRIC_TYPE>
+	void SetToMetric(const MetricsType setting, const Value &value) {
+		D_ASSERT(!metrics[setting].IsNull());
+		if (metrics.find(setting) == metrics.end()) {
+			metrics[setting] = value;
+			return;
+		}
+		metrics[setting] = value;
+	}
+
+	template <class METRIC_TYPE>
+	void SetToMetric(const MetricsType setting, const METRIC_TYPE &value) {
+		auto new_value = Value::CreateValue(value);
+		return SetToMetric<METRIC_TYPE>(setting, new_value);
+	}
 };
 } // namespace duckdb

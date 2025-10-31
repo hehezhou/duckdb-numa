@@ -35,13 +35,14 @@ class SQLStatement;
 
 struct OperatorInformation {
 	explicit OperatorInformation(double time_p = 0, idx_t elements_returned_p = 0, idx_t elements_scanned_p = 0,
-	                             idx_t result_set_size_p = 0)
-	    : time(time_p), elements_returned(elements_returned_p), result_set_size(result_set_size_p) {
+	                             idx_t result_set_size_p = 0, idx_t data_width_p = 0)
+	    : time(time_p), elements_returned(elements_returned_p), result_set_size(result_set_size_p), data_width(data_width_p) {
 	}
 
 	double time;
 	idx_t elements_returned;
 	idx_t result_set_size;
+	idx_t data_width;
 	string name;
 
 	void AddTime(double n_time) {
@@ -54,6 +55,10 @@ struct OperatorInformation {
 
 	void AddResultSetSize(idx_t n_result_set_size) {
 		result_set_size += n_result_set_size;
+	}
+
+	void SetDataWidth(idx_t n_data_width) {
+		data_width = n_data_width;
 	}
 };
 

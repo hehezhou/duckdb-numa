@@ -4453,6 +4453,8 @@ const char* EnumUtil::ToChars<MetricsType>(MetricsType value) {
 		return "OPTIMIZER_EXTENSION";
 	case MetricsType::OPTIMIZER_MATERIALIZED_CTE:
 		return "OPTIMIZER_MATERIALIZED_CTE";
+	case MetricsType::DATA_WIDTH:
+		return "DATA_WIDTH";
 	default:
 		throw NotImplementedException(StringUtil::Format("Enum value: '%d' not implemented in ToChars<MetricsType>", value));
 	}
@@ -4585,6 +4587,9 @@ MetricsType EnumUtil::FromString<MetricsType>(const char *value) {
 	}
 	if (StringUtil::Equals(value, "OPTIMIZER_MATERIALIZED_CTE")) {
 		return MetricsType::OPTIMIZER_MATERIALIZED_CTE;
+	}
+	if (StringUtil::Equals(value, "DATA_WIDTH")) {
+		return MetricsType::DATA_WIDTH;
 	}
 	throw NotImplementedException(StringUtil::Format("Enum value: '%s' not implemented in FromString<MetricsType>", value));
 }

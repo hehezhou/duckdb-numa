@@ -13,12 +13,12 @@ profiler_settings_t ProfilingInfo::DefaultSettings() {
 	return {MetricsType::QUERY_NAME,           MetricsType::BLOCKED_THREAD_TIME,     MetricsType::CPU_TIME,
 	        MetricsType::EXTRA_INFO,           MetricsType::CUMULATIVE_CARDINALITY,  MetricsType::OPERATOR_TYPE,
 	        MetricsType::OPERATOR_CARDINALITY, MetricsType::CUMULATIVE_ROWS_SCANNED, MetricsType::OPERATOR_ROWS_SCANNED,
-	        MetricsType::OPERATOR_TIMING,      MetricsType::RESULT_SET_SIZE};
+	        MetricsType::OPERATOR_TIMING,      MetricsType::RESULT_SET_SIZE,         MetricsType::DATA_WIDTH};
 }
 
 profiler_settings_t ProfilingInfo::DefaultOperatorSettings() {
 	return {MetricsType::OPERATOR_CARDINALITY, MetricsType::OPERATOR_ROWS_SCANNED, MetricsType::OPERATOR_TIMING,
-	        MetricsType::RESULT_SET_SIZE};
+	        MetricsType::RESULT_SET_SIZE,      MetricsType::DATA_WIDTH};
 }
 
 profiler_settings_t ProfilingInfo::AllSettings() {
@@ -68,7 +68,8 @@ void ProfilingInfo::ResetMetrics() {
 		case MetricsType::CUMULATIVE_CARDINALITY:
 		case MetricsType::OPERATOR_CARDINALITY:
 		case MetricsType::CUMULATIVE_ROWS_SCANNED:
-		case MetricsType::OPERATOR_ROWS_SCANNED: {
+		case MetricsType::OPERATOR_ROWS_SCANNED:
+		case MetricsType::DATA_WIDTH: {
 			metrics[metric] = Value::CreateValue<uint64_t>(0);
 			break;
 		}
@@ -183,7 +184,8 @@ void ProfilingInfo::WriteMetricsToJSON(yyjson_mut_doc *doc, yyjson_mut_val *dest
 		case MetricsType::CUMULATIVE_CARDINALITY:
 		case MetricsType::OPERATOR_CARDINALITY:
 		case MetricsType::CUMULATIVE_ROWS_SCANNED:
-		case MetricsType::OPERATOR_ROWS_SCANNED: {
+		case MetricsType::OPERATOR_ROWS_SCANNED:
+		case MetricsType::DATA_WIDTH: {
 			yyjson_mut_obj_add_uint(doc, dest, key_ptr, metrics[metric].GetValue<uint64_t>());
 			break;
 		}

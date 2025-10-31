@@ -679,7 +679,8 @@ void JoinHashTable::InsertHashes(Vector &hashes_v, const idx_t count, TupleDataC
 	}
 }
 
-void JoinHashTable::InitializePointerTable() {
+
+void JoinHashTable::AllocatePointerTable() {
 	capacity = PointerTableCapacity(Count());
 	D_ASSERT(IsPowerOfTwo(capacity));
 
@@ -701,10 +702,12 @@ void JoinHashTable::InitializePointerTable() {
 	}
 	D_ASSERT(hash_map.GetSize() == capacity * sizeof(ht_entry_t));
 
-	// initialize HT with all-zero entries
-	std::fill_n(entries, capacity, ht_entry_t::GetEmptyEntry());
-
 	bitmask = capacity - 1;
+}
+
+void JoinHashTable::InitializePointerTable(idx_t entry_idx_from, idx_t entry_idx_to) {
+	// initialize HT with all-zero entries
+	std::fill_n(entries + entry_idx_from, entry_idx_to - entry_idx_from, ht_entry_t::GetEmptyEntry());
 }
 
 void JoinHashTable::Finalize(idx_t chunk_idx_from, idx_t chunk_idx_to, bool parallel) {

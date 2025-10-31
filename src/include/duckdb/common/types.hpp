@@ -351,7 +351,7 @@ private:
 	PhysicalType physical_type_; // NOLINT: allow this naming for legacy reasons
 	shared_ptr<ExtraTypeInfo> type_info_; // NOLINT: allow this naming for legacy reasons
 
-private:
+public:
 	PhysicalType GetInternalType();
 
 public:
