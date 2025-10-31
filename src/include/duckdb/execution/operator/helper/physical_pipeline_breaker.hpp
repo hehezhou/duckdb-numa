@@ -27,18 +27,18 @@ struct ChunkReference {
 	ChunkMetaData chunk_meta;
 };
 
-typedef duckdb_moodycamel::ConcurrentQueue<ChunkReference> concurrent_queue_t;
-typedef duckdb_moodycamel::LightweightSemaphore lightweight_semaphore_t;
+typedef duckdb_moodycamel::ConcurrentQueue<ChunkReference> breaker_concurrent_queue_t;
+typedef duckdb_moodycamel::LightweightSemaphore breaker_lightweight_semaphore_t;
 
-struct ConcurrentQueue {
+struct BreakerConcurrentQueue {
 public:
 	void Enqueue(ChunkReference &&chunk_ref);
 	bool TryDequeue(ChunkReference &chunk_ref);
 	void Finalize();
 
 private:
-	concurrent_queue_t q;
-	lightweight_semaphore_t semaphore;
+	breaker_concurrent_queue_t q;
+	breaker_lightweight_semaphore_t semaphore;
 };
 
 //! PhysicalPipelineBreaker represents a physical operator that is used to break up pipelines
@@ -85,6 +85,6 @@ public:
 	void BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) override;
 
 private:
-	unique_ptr<ConcurrentQueue> chunk_queue;
+	unique_ptr<BreakerConcurrentQueue> chunk_queue;
 };
 }  // namespace duckdb

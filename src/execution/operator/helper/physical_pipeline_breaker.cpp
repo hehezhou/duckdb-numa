@@ -44,7 +44,7 @@ private:
 	vector<column_t> column_ids;
 };
 
-void ConcurrentQueue::Enqueue(ChunkReference &&chunk_ref) {
+void BreakerConcurrentQueue::Enqueue(ChunkReference &&chunk_ref) {
 	if (q.enqueue(std::move(chunk_ref))) {
 		semaphore.signal();
 	} else {
@@ -52,19 +52,19 @@ void ConcurrentQueue::Enqueue(ChunkReference &&chunk_ref) {
 	}
 }
 
-bool ConcurrentQueue::TryDequeue(ChunkReference &chunk_ref) {
+bool BreakerConcurrentQueue::TryDequeue(ChunkReference &chunk_ref) {
 	semaphore.wait();
 	return q.try_dequeue(chunk_ref);
 }
 
-void ConcurrentQueue::Finalize() {
+void BreakerConcurrentQueue::Finalize() {
 	semaphore.signal(96);
 }
 
 PhysicalPipelineBreaker::PhysicalPipelineBreaker(vector<LogicalType> types, unique_ptr<PhysicalOperator> child_operator,
                                                  idx_t estimated_cardinality)
     : PhysicalOperator(PhysicalOperatorType::PIPELINE_BREAKER, std::move(types), estimated_cardinality),
-	  chunk_queue(make_uniq<ConcurrentQueue>()) {
+	  chunk_queue(make_uniq<BreakerConcurrentQueue>()) {
 	children.push_back(std::move(child_operator));
 }
 
@@ -136,6 +136,7 @@ public:
 	}
 public:
 	ChunkManagementState scan_state;
+	ChunkReference chunk_ref;
 };
 
 unique_ptr<LocalSourceState> PhysicalPipelineBreaker::GetLocalSourceState(ExecutionContext &context,
@@ -146,7 +147,7 @@ unique_ptr<LocalSourceState> PhysicalPipelineBreaker::GetLocalSourceState(Execut
 SourceResultType PhysicalPipelineBreaker::GetData(ExecutionContext &context, DataChunk &chunk,
                                                   OperatorSourceInput &input) const {
 	auto &lstate = input.local_state.Cast<PipelineBreakerLocalSource>();
-	ChunkReference chunk_ref;
+	auto &chunk_ref = lstate.chunk_ref;
 	if (chunk_queue->TryDequeue(chunk_ref)) {
 		chunk_ref.buffer->Scan(chunk_ref.chunk_meta, chunk, lstate.scan_state);
 		return SourceResultType::HAVE_MORE_OUTPUT;
@@ -168,7 +169,7 @@ void PhysicalPipelineBreaker::BuildPipelines(Pipeline &current, MetaPipeline &me
 	state.SetPipelineSource(current, *this);
 
 	// we create a new pipeline starting from the child
-	auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipelineWithoutDependency(current, *this);
+	auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, *this);
 	child_meta_pipeline.GetBasePipeline()->numa_id = 1;
 	child_meta_pipeline.Build(*children[0]);
 }

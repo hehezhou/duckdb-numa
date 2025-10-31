@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <chrono>
 
+double numa_test_start;
+
 namespace duckdb {
 
 Executor::Executor(ClientContext &context) : context(context), executor_tasks(0), blocked_thread_time(0) {

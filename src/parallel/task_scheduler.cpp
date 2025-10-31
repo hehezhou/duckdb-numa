@@ -40,26 +40,22 @@ typedef duckdb_moodycamel::LightweightSemaphore lightweight_semaphore_t;
 
 struct ConcurrentQueue {
 	concurrent_queue_t q;
-	concurrent_queue_t q_2;
 	lightweight_semaphore_t semaphore;
-	lightweight_semaphore_t semaphore_2;
 
 	void Enqueue(ProducerToken &token, shared_ptr<Task> task);
 	void EnqueueNUMA(ProducerToken &token, shared_ptr<Task> task, idx_t numa_id);
 	bool DequeueFromProducer(ProducerToken &token, shared_ptr<Task> &task);
 	bool Dequeue(shared_ptr<Task> &task, idx_t cpu_id);
 	void SignAll(idx_t n) {
-		semaphore.signal(static_cast<size_t>(n / 2));
-		semaphore_2.signal(static_cast<size_t>((n + 1) / 2));
+		semaphore.signal(static_cast<size_t>(n));
 	}
 };
 
 struct QueueProducerToken {
-	explicit QueueProducerToken(ConcurrentQueue &queue) : queue_token(queue.q), queue_token_2(queue.q_2) {
+	explicit QueueProducerToken(ConcurrentQueue &queue) : queue_token(queue.q) {
 	}
 
 	duckdb_moodycamel::ProducerToken queue_token;
-	duckdb_moodycamel::ProducerToken queue_token_2;
 };
 
 void ConcurrentQueue::Enqueue(ProducerToken &token, shared_ptr<Task> task) {
@@ -72,31 +68,17 @@ void ConcurrentQueue::Enqueue(ProducerToken &token, shared_ptr<Task> task) {
 }
 
 void ConcurrentQueue::EnqueueNUMA(ProducerToken &token, shared_ptr<Task> task, idx_t numa_id) {
-	if (numa_id == 0) {
-		lock_guard<mutex> producer_lock(token.producer_lock);
-		if (q.enqueue(token.token->queue_token, std::move(task))) {
-			semaphore.signal();
-		} else {
-			throw InternalException("Could not schedule task!");
-		}
-	} else if (numa_id == 1) {
-		lock_guard<mutex> producer_lock(token.producer_lock);
-		if (q_2.enqueue(token.token->queue_token_2, std::move(task))) {
-			semaphore_2.signal();
-		} else {
-			throw InternalException("Could not schedule task!");
-		}
+	lock_guard<mutex> producer_lock(token.producer_lock);
+	if (q.enqueue(token.token->queue_token, std::move(task))) {
+		semaphore.signal();
+	} else {
+		throw InternalException("Could not schedule task!");
 	}
 }
 
 bool ConcurrentQueue::Dequeue(shared_ptr<Task> &task, idx_t cpu_id) {
-	if (cpu_id % 2 == 0) {
-		semaphore.wait();
-		return q.try_dequeue(task);
-	} else {
-		semaphore_2.wait();
-		return q_2.try_dequeue(task);
-	}
+	semaphore.wait();
+	return q.try_dequeue(task);
 }
 
 bool ConcurrentQueue::DequeueFromProducer(ProducerToken &token, shared_ptr<Task> &task) {

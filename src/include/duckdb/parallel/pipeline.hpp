@@ -125,16 +125,16 @@ public:
 	                          unique_ptr<GlobalSourceState> state, unique_ptr<LocalSourceState> local_state) {
 		mat_table = table;
 		materialize_source = op;
-		materialize_source_state = move(state);
-		materialize_local_source_state = move(local_state);
+		materialize_source_state = std::move(state);
+		materialize_local_source_state = std::move(local_state);
 	}
 
 	void SetMaterializeMap(int col_idx, unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types,
 	                       unordered_map<int64_t, int32_t> string_columns) {
 		rowid_col_idx = col_idx;
-		materialize_column_ids = move(colid);
-		materialize_column_types = move(types);
-		fixed_len_strings_columns = move(string_columns);
+		materialize_column_ids = std::move(colid);
+		materialize_column_types = std::move(types);
+		fixed_len_strings_columns = std::move(string_columns);
 		materialize_flag = true;
 	}
 

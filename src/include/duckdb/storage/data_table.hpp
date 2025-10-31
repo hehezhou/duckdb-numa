@@ -234,7 +234,7 @@ public:
 	                                optional_ptr<ConflictManager> conflict_manager);
 
 	shared_ptr<RowGroupCollection> GetRowGroupCollection() {
-		return move(row_groups);
+		return std::move(row_groups);
 	}
 
 private:
