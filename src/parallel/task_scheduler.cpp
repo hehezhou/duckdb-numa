@@ -25,6 +25,8 @@
 
 namespace duckdb {
 
+const idx_t NUM_NUMA = 2;
+
 struct SchedulerThread {
 #ifndef DUCKDB_NO_THREADS
 	explicit SchedulerThread(unique_ptr<thread> thread_p) : internal_thread(std::move(thread_p)) {
@@ -39,69 +41,54 @@ typedef duckdb_moodycamel::ConcurrentQueue<shared_ptr<Task>> concurrent_queue_t;
 typedef duckdb_moodycamel::LightweightSemaphore lightweight_semaphore_t;
 
 struct ConcurrentQueue {
-	concurrent_queue_t q;
-	concurrent_queue_t q_2;
-	lightweight_semaphore_t semaphore;
-	lightweight_semaphore_t semaphore_2;
+	concurrent_queue_t q[NUM_NUMA];
+	lightweight_semaphore_t semaphore[NUM_NUMA];
 
 	void Enqueue(ProducerToken &token, shared_ptr<Task> task);
 	void EnqueueNUMA(ProducerToken &token, shared_ptr<Task> task, idx_t numa_id);
 	bool DequeueFromProducer(ProducerToken &token, shared_ptr<Task> &task);
 	bool Dequeue(shared_ptr<Task> &task, idx_t cpu_id);
 	void SignAll(idx_t n) {
-		semaphore.signal(static_cast<size_t>(n / 2));
-		semaphore_2.signal(static_cast<size_t>((n + 1) / 2));
+		for (idx_t i = 0; i < NUM_NUMA; i++) {
+			semaphore[i].signal(static_cast<size_t>((n + NUM_NUMA - 1) / NUM_NUMA));
+		}
 	}
 };
 
 struct QueueProducerToken {
-	explicit QueueProducerToken(ConcurrentQueue &queue) : queue_token(queue.q), queue_token_2(queue.q_2) {
+	explicit QueueProducerToken(ConcurrentQueue &queue)
+		: queue_token{duckdb_moodycamel::ProducerToken(queue.q[0]), duckdb_moodycamel::ProducerToken(queue.q[1])} {
 	}
 
-	duckdb_moodycamel::ProducerToken queue_token;
-	duckdb_moodycamel::ProducerToken queue_token_2;
+	duckdb_moodycamel::ProducerToken queue_token[NUM_NUMA];
 };
 
 void ConcurrentQueue::Enqueue(ProducerToken &token, shared_ptr<Task> task) {
 	lock_guard<mutex> producer_lock(token.producer_lock);
-	if (q.enqueue(token.token->queue_token, std::move(task))) {
-		semaphore.signal();
+	if (q[0].enqueue(token.token->queue_token[0], std::move(task))) {
+		semaphore[0].signal();
 	} else {
 		throw InternalException("Could not schedule task!");
 	}
 }
 
 void ConcurrentQueue::EnqueueNUMA(ProducerToken &token, shared_ptr<Task> task, idx_t numa_id) {
-	if (numa_id == 0) {
-		lock_guard<mutex> producer_lock(token.producer_lock);
-		if (q.enqueue(token.token->queue_token, std::move(task))) {
-			semaphore.signal();
-		} else {
-			throw InternalException("Could not schedule task!");
-		}
-	} else if (numa_id == 1) {
-		lock_guard<mutex> producer_lock(token.producer_lock);
-		if (q_2.enqueue(token.token->queue_token_2, std::move(task))) {
-			semaphore_2.signal();
-		} else {
-			throw InternalException("Could not schedule task!");
-		}
+	lock_guard<mutex> producer_lock(token.producer_lock);
+	if (q[numa_id].enqueue(token.token->queue_token[numa_id], std::move(task))) {
+		semaphore[numa_id].signal();
+	} else {
+		throw InternalException("Could not schedule task!");
 	}
 }
 
-bool ConcurrentQueue::Dequeue(shared_ptr<Task> &task, idx_t cpu_id) {
-	if (cpu_id % 2 == 0) {
-		semaphore.wait();
-		return q.try_dequeue(task);
-	} else {
-		semaphore_2.wait();
-		return q_2.try_dequeue(task);
-	}
+bool ConcurrentQueue::Dequeue(shared_ptr<Task> &task, idx_t numa_id) {
+	semaphore[numa_id].wait();
+	return q[numa_id].try_dequeue(task);
 }
 
 bool ConcurrentQueue::DequeueFromProducer(ProducerToken &token, shared_ptr<Task> &task) {
 	lock_guard<mutex> producer_lock(token.producer_lock);
-	return q.try_dequeue_from_producer(token.token->queue_token, task);
+	return q[0].try_dequeue_from_producer(token.token->queue_token[0], task);
 }
 
 #else
@@ -203,10 +190,12 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 #ifndef DUCKDB_NO_THREADS
 	static constexpr const int64_t INITIAL_FLUSH_WAIT = 500000; // initial wait time of 0.5s (in mus) before flushing
 
+	idx_t numa_id = cpu_id % NUM_NUMA;
+
 	shared_ptr<Task> task;
 	// loop until the marker is set to false
 	while (*marker) {
-		if (queue->Dequeue(task, cpu_id)) {
+		if (queue->Dequeue(task, numa_id)) {
 			auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
 
 			switch (execute_result) {
@@ -239,7 +228,7 @@ idx_t TaskScheduler::ExecuteTasks(atomic<bool> *marker, idx_t max_tasks) {
 	// loop until the marker is set to false
 	while (*marker && completed_tasks < max_tasks) {
 		shared_ptr<Task> task;
-		if (!queue->q.try_dequeue(task)) {
+		if (!queue->q[0].try_dequeue(task)) {
 			return completed_tasks;
 		}
 		auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
@@ -268,8 +257,8 @@ void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
 #ifndef DUCKDB_NO_THREADS
 	shared_ptr<Task> task;
 	for (idx_t i = 0; i < max_tasks; i++) {
-		queue->semaphore.wait(TASK_TIMEOUT_USECS);
-		if (!queue->q.try_dequeue(task)) {
+		queue->semaphore[0].wait(TASK_TIMEOUT_USECS);
+		if (!queue->q[0].try_dequeue(task)) {
 			return;
 		}
 		try {
