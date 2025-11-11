@@ -380,11 +380,9 @@ void ValidityScan(ColumnSegment &segment, ColumnScanState &state, idx_t scan_cou
 //===--------------------------------------------------------------------===//
 void ValidityFetchRow(ColumnSegment &segment, ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx) {
 	D_ASSERT(row_id >= 0 && row_id < row_t(segment.count));
-	// auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
-	// auto handle = buffer_manager.Pin(segment.block);
-	// auto dataptr = handle.Ptr() + segment.GetBlockOffset();
-	// fix me: currently disabling the validity map
-	auto dataptr = segment.block->buffer->buffer + segment.GetBlockOffset();
+	auto &buffer_manager = BufferManager::GetBufferManager(segment.db);
+	auto handle = buffer_manager.Pin(segment.block);
+	auto dataptr = handle.Ptr() + segment.GetBlockOffset();
 	ValidityMask mask(reinterpret_cast<validity_t *>(dataptr));
 	auto &result_mask = FlatVector::Validity(result);
 	if (!mask.RowIsValidUnsafe(NumericCast<idx_t>(row_id))) {

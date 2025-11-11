@@ -1,13 +1,12 @@
 #include "duckdb/storage/table/standard_column_data.hpp"
-
-#include "duckdb/common/serializer/deserializer.hpp"
-#include "duckdb/common/serializer/serializer.hpp"
-#include "duckdb/planner/table_filter.hpp"
-#include "duckdb/storage/data_table.hpp"
-#include "duckdb/storage/table/append_state.hpp"
-#include "duckdb/storage/table/column_checkpoint_state.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
+#include "duckdb/storage/table/append_state.hpp"
+#include "duckdb/storage/data_table.hpp"
+#include "duckdb/planner/table_filter.hpp"
+#include "duckdb/storage/table/column_checkpoint_state.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 namespace duckdb {
 
@@ -147,8 +146,7 @@ void StandardColumnData::FetchRow(TransactionData transaction, ColumnFetchState 
 		auto child_state = make_uniq<ColumnFetchState>();
 		state.child_states.push_back(std::move(child_state));
 	}
-	// fix me: currently disable validity map
-	//  validity.FetchRow(transaction, *state.child_states[0], row_id, result, result_idx);
+	validity.FetchRow(transaction, *state.child_states[0], row_id, result, result_idx);
 	ColumnData::FetchRow(transaction, state, row_id, result, result_idx);
 }
 

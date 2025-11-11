@@ -1,24 +1,23 @@
 #include "duckdb/storage/table/column_data.hpp"
-
 #include "duckdb/common/exception/transaction_exception.hpp"
-#include "duckdb/common/serializer/binary_deserializer.hpp"
-#include "duckdb/common/serializer/read_stream.hpp"
-#include "duckdb/common/serializer/serializer.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/function/compression_function.hpp"
 #include "duckdb/planner/table_filter.hpp"
 #include "duckdb/storage/data_pointer.hpp"
 #include "duckdb/storage/data_table.hpp"
 #include "duckdb/storage/statistics/distinct_statistics.hpp"
-#include "duckdb/storage/table/append_state.hpp"
-#include "duckdb/storage/table/array_column_data.hpp"
 #include "duckdb/storage/table/column_data_checkpointer.hpp"
 #include "duckdb/storage/table/list_column_data.hpp"
-#include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/storage/table/standard_column_data.hpp"
+#include "duckdb/storage/table/array_column_data.hpp"
 #include "duckdb/storage/table/struct_column_data.hpp"
 #include "duckdb/storage/table/update_segment.hpp"
 #include "duckdb/storage/table_storage_info.hpp"
+#include "duckdb/storage/table/append_state.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
+#include "duckdb/common/serializer/read_stream.hpp"
+#include "duckdb/common/serializer/binary_deserializer.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
 
 namespace duckdb {
 
@@ -427,7 +426,6 @@ void ColumnData::AppendData(BaseStatistics &append_stats, ColumnAppendState &sta
 	this->count += append_count;
 	while (true) {
 		// append the data from the vector
-		// std::cout << "remain append count " << append_count << std::endl;
 		idx_t copied_elements = state.current->Append(state, vdata, offset, append_count);
 		append_stats.Merge(state.current->stats.statistics);
 		if (copied_elements == append_count) {
@@ -480,33 +478,16 @@ idx_t ColumnData::Fetch(ColumnScanState &state, row_t row_id, Vector &result) {
 	state.internal_index = state.current->start;
 	return ScanVector(state, result, STANDARD_VECTOR_SIZE, ScanVectorType::SCAN_FLAT_VECTOR);
 }
+
 void ColumnData::FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
                           idx_t result_idx) {
 	auto segment = data.GetSegment(UnsafeNumericCast<idx_t>(row_id));
+
 	// now perform the fetch within the segment
 	segment->FetchRow(state, row_id, result, result_idx);
 	// merge any updates made to this row
 
-	// FetchUpdateRow(transaction, row_id, result, result_idx);
-}
-
-void ColumnData::FetchRowNew(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-                             idx_t result_idx, int32_t string_size) {
-	// auto segment = data.GetSegment(UnsafeNumericCast<idx_t>(row_id));
-	// __builtin_prefetch(&data.start_index, 0, 3);
-	ColumnSegment *segment = nullptr;
-	if (string_size != 0 || (data.nodes[0].node->function.get().type == CompressionType::COMPRESSION_UNCOMPRESSED &&
-	                         data.nodes[0].node->type.InternalType() != PhysicalType::VARCHAR)) {
-		// segment = data.GetSegmentNode_fixed(((row_id % 1048576) % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
-		segment = data.GetSegmentNode_fixed((row_id % STANDARD_ROW_GROUPS_SIZE), row_id, string_size);
-	} else {
-		segment = data.GetSegmentNode(row_id, row_id);
-	}
-	// now perform the fetch within the segment
-	segment->FetchRow(state, row_id, result, result_idx);
-	// merge any updates made to this row
-
-	// FetchUpdateRow(transaction, row_id, result, result_idx);
+	FetchUpdateRow(transaction, row_id, result, result_idx);
 }
 
 void ColumnData::Update(TransactionData transaction, idx_t column_index, Vector &update_vector, row_t *row_ids,
@@ -532,17 +513,16 @@ void ColumnData::AppendTransientSegment(SegmentLock &l, idx_t start_row) {
 	const auto type_size = GetTypeIdSize(type.InternalType());
 	auto vector_segment_size = block_size;
 
-	// 	if (start_row == NumericCast<idx_t>(MAX_ROW_ID)) {
-	// #if STANDARD_VECTOR_SIZE < 1024
-	// 		vector_segment_size = 1024 * type_size;
-	// #else
-	// 		vector_segment_size = STANDARD_VECTOR_SIZE * type_size;
-	// #endif
-	// 	}
+	if (start_row == NumericCast<idx_t>(MAX_ROW_ID)) {
+#if STANDARD_VECTOR_SIZE < 1024
+		vector_segment_size = 1024 * type_size;
+#else
+		vector_segment_size = STANDARD_VECTOR_SIZE * type_size;
+#endif
+	}
 
 	// The segment size is bound by the block size, but can be smaller.
 	idx_t segment_size = block_size < vector_segment_size ? block_size : vector_segment_size;
-	// std::cout << start_row << " " << block_size << " " << segment_size << std::endl;
 	allocation_size += segment_size;
 	auto new_segment = ColumnSegment::CreateTransientSegment(GetDatabase(), type, start_row, segment_size, block_size);
 	data.AppendSegment(l, std::move(new_segment));

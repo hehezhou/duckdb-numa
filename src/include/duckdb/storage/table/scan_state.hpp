@@ -9,12 +9,12 @@
 #pragma once
 
 #include "duckdb/common/common.hpp"
-#include "duckdb/common/enums/scan_options.hpp"
 #include "duckdb/common/map.hpp"
-#include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/storage/buffer/buffer_handle.hpp"
 #include "duckdb/storage/storage_lock.hpp"
+#include "duckdb/common/enums/scan_options.hpp"
 #include "duckdb/storage/table/segment_lock.hpp"
+#include "duckdb/common/types/data_chunk.hpp"
 
 namespace duckdb {
 class AdaptiveFilter;
@@ -193,11 +193,6 @@ public:
 	const vector<storage_t> &GetColumnIds();
 	ScanFilterInfo &GetFilterInfo();
 	TableScanOptions &GetOptions();
-	bool Select(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
-	            std::unordered_map<int64_t, int64_t> &project_column_ids,
-	            std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns);
-	bool SelectCol(DuckTransaction &transaction, DataChunk &result, idx_t rowid_col_idx,
-	               std::unordered_map<int64_t, int64_t> &project_column_ids);
 	bool Scan(DuckTransaction &transaction, DataChunk &result);
 	bool ScanCommitted(DataChunk &result, TableScanType type);
 	bool ScanCommitted(DataChunk &result, SegmentLock &l, TableScanType type);

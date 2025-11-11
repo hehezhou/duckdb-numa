@@ -148,8 +148,6 @@ public:
 	//! Initialize the column data collection
 	void Initialize(vector<LogicalType> types);
 
-	void InitializeAppend(LogicalType type);
-
 	//! Get references to the string heaps in this ColumnDataCollection
 	vector<shared_ptr<StringHeap>> GetHeapReferences();
 	//! Get the allocator type of this ColumnDataCollection

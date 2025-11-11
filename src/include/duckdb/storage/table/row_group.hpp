@@ -8,16 +8,16 @@
 
 #pragma once
 
-#include "duckdb/common/enums/checkpoint_type.hpp"
+#include "duckdb/common/vector_size.hpp"
+#include "duckdb/storage/table/chunk_info.hpp"
+#include "duckdb/storage/statistics/segment_statistics.hpp"
+#include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/enums/scan_options.hpp"
 #include "duckdb/common/mutex.hpp"
-#include "duckdb/common/types/data_chunk.hpp"
-#include "duckdb/common/vector_size.hpp"
 #include "duckdb/parser/column_list.hpp"
-#include "duckdb/storage/block.hpp"
-#include "duckdb/storage/statistics/segment_statistics.hpp"
-#include "duckdb/storage/table/chunk_info.hpp"
 #include "duckdb/storage/table/segment_base.hpp"
+#include "duckdb/storage/block.hpp"
+#include "duckdb/common/enums/checkpoint_type.hpp"
 
 namespace duckdb {
 class AttachedDatabase;
@@ -85,7 +85,6 @@ private:
 	vector<shared_ptr<ColumnData>> columns;
 
 public:
-	std::pair<idx_t, idx_t> GetRange() const;
 	void MoveToCollection(RowGroupCollection &collection, idx_t new_start);
 	RowGroupCollection &GetCollection() {
 		return collection.get();
@@ -115,12 +114,6 @@ public:
 	//! skipped.
 	bool CheckZonemapSegments(CollectionScanState &state);
 	void Scan(TransactionData transaction, CollectionScanState &state, DataChunk &result);
-	void GetScalar(TransactionData transaction, CollectionScanState &state, DataChunk &result, uint64_t row_id,
-	               std::unordered_map<int64_t, int64_t> &project_column_ids,
-	               std::unordered_map<int64_t, int32_t> &fixed_len_strings_columns, int64_t result_rowid,
-	               ColumnFetchState &cfs);
-	void GetScalarCol(TransactionData transaction, CollectionScanState &state, Vector &result, uint64_t row_id,
-	                  int64_t col_idx, int64_t result_rowid, ColumnFetchState &cfs);
 	void ScanCommitted(CollectionScanState &state, DataChunk &result, TableScanType type);
 
 	idx_t GetSelVector(TransactionData transaction, idx_t vector_idx, SelectionVector &sel_vector, idx_t max_count);

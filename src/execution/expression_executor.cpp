@@ -2,8 +2,8 @@
 
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/execution_context.hpp"
-#include "duckdb/planner/expression/list.hpp"
 #include "duckdb/storage/statistics/base_statistics.hpp"
+#include "duckdb/planner/expression/list.hpp"
 
 namespace duckdb {
 
@@ -69,14 +69,14 @@ void ExpressionExecutor::Initialize(const Expression &expression, ExpressionExec
 
 void ExpressionExecutor::Execute(DataChunk *input, DataChunk &result) {
 	SetChunk(input);
-	// D_ASSERT(expressions.size() == result.ColumnCount());
+	D_ASSERT(expressions.size() == result.ColumnCount());
 	D_ASSERT(!expressions.empty());
 
 	for (idx_t i = 0; i < expressions.size(); i++) {
 		ExecuteExpression(i, result.data[i]);
 	}
 	result.SetCardinality(input ? input->size() : 1);
-	// result.Verify();
+	result.Verify();
 }
 
 void ExpressionExecutor::ExecuteExpression(DataChunk &input, Vector &result) {

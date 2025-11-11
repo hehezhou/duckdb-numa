@@ -4,11 +4,8 @@
 #include "duckdb/common/exception.hpp"
 #include "duckdb/common/helper.hpp"
 #include "duckdb/common/printer.hpp"
-#include "duckdb/common/serializer/binary_deserializer.hpp"
-#include "duckdb/common/serializer/binary_serializer.hpp"
-#include "duckdb/common/serializer/deserializer.hpp"
-#include "duckdb/common/serializer/memory_stream.hpp"
 #include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 #include "duckdb/common/types/interval.hpp"
 #include "duckdb/common/types/sel_cache.hpp"
 #include "duckdb/common/types/vector_cache.hpp"
@@ -16,21 +13,16 @@
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/execution/execution_context.hpp"
 
+#include "duckdb/common/serializer/memory_stream.hpp"
+#include "duckdb/common/serializer/binary_serializer.hpp"
+#include "duckdb/common/serializer/binary_deserializer.hpp"
+
 namespace duckdb {
 
 DataChunk::DataChunk() : count(0), capacity(STANDARD_VECTOR_SIZE) {
 }
 
 DataChunk::~DataChunk() {
-}
-
-DataChunk::DataChunk(DataChunk &&chunk_p) {
-	Move(chunk_p);
-}
-
-DataChunk& DataChunk::operator=(DataChunk &&chunk_p) {
-	Move(chunk_p);
-	return *this;
 }
 
 void DataChunk::InitializeEmpty(const vector<LogicalType> &types) {

@@ -384,6 +384,12 @@ void TaskScheduler::RelaunchThreads() {
 
 void TaskScheduler::RelaunchThreadsInternal(int32_t n) {
 #ifndef DUCKDB_NO_THREADS
+
+	cpu_set_t cpu_mask;
+	CPU_ZERO(&cpu_mask);
+	CPU_SET(0, &cpu_mask);
+	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
+
 	auto &config = DBConfig::GetConfig(db);
 	auto new_thread_count = NumericCast<idx_t>(n);
 	if (threads.size() == new_thread_count) {

@@ -9,9 +9,9 @@
 #pragma once
 
 #include "duckdb/common/enums/statement_type.hpp"
-#include "duckdb/common/error_data.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
 #include "duckdb/common/winapi.hpp"
+#include "duckdb/common/error_data.hpp"
 #include "duckdb/main/client_properties.hpp"
 
 namespace duckdb {
@@ -104,13 +104,10 @@ public:
 	DUCKDB_API virtual unique_ptr<DataChunk> FetchRaw() = 0;
 	//! Converts the QueryResult to a string
 	DUCKDB_API virtual string ToString() = 0;
-	virtual int64_t GetRowNumber() = 0;
 	//! Converts the QueryResult to a box-rendered string
 	DUCKDB_API virtual string ToBox(ClientContext &context, const BoxRendererConfig &config);
 	//! Prints the QueryResult to the console
 	DUCKDB_API void Print();
-
-	void PrintRowNumber();
 	//! Returns true if the two results are identical; false otherwise. Note that this method is destructive; it calls
 	//! Fetch() until both results are exhausted. The data in the results will be lost.
 	DUCKDB_API bool Equals(QueryResult &other);
