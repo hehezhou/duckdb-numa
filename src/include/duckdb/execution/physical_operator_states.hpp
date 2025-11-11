@@ -162,18 +162,12 @@ struct OperatorSinkInput {
 	GlobalSinkState &global_state;
 	LocalSinkState &local_state;
 	InterruptState &interrupt_state;
-	bool materialize_flag;
-	map<int64_t, int8_t> materialize_column_types;
 };
 
 struct OperatorSourceInput {
 	GlobalSourceState &global_state;
 	LocalSourceState &local_state;
 	InterruptState &interrupt_state;
-	bool materialize_flag;
-	int64_t rowid_column_id;
-	unordered_map<int64_t, int64_t> materialize_col_id;
-	unordered_map<int64_t, int32_t> fixed_len_strings_columns;
 };
 
 struct OperatorSinkCombineInput {

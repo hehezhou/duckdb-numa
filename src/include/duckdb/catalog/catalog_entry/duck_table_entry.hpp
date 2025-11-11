@@ -26,10 +26,6 @@ public:
 	//! Returns the underlying storage of the table
 	DataTable &GetStorage() override;
 
-	shared_ptr<DataTable> GetDataTable() {
-		return storage;
-	}
-
 	//! Get statistics of a column (physical or virtual) within the table
 	unique_ptr<BaseStatistics> GetStatistics(ClientContext &context, column_t column_id) override;
 

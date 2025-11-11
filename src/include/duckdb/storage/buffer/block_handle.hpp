@@ -119,7 +119,6 @@ public:
 	bool IsUnloaded() {
 		return state == BlockState::BLOCK_UNLOADED;
 	}
-	unique_ptr<FileBuffer> buffer;
 
 private:
 	BufferHandle Load(unique_ptr<FileBuffer> buffer = nullptr);
@@ -139,6 +138,7 @@ private:
 	//! Memory tag
 	MemoryTag tag;
 	//! Pointer to loaded data (if any)
+	unique_ptr<FileBuffer> buffer;
 	//! Internal eviction sequence number
 	atomic<idx_t> eviction_seq_num;
 	//! LRU timestamp (for age-based eviction)

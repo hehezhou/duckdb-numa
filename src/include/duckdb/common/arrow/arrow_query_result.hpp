@@ -8,11 +8,11 @@
 
 #pragma once
 
+#include "duckdb/common/winapi.hpp"
 #include "duckdb/common/arrow/arrow_wrapper.hpp"
+#include "duckdb/main/query_result.hpp"
 #include "duckdb/common/error_data.hpp"
 #include "duckdb/common/unique_ptr.hpp"
-#include "duckdb/common/winapi.hpp"
-#include "duckdb/main/query_result.hpp"
 
 namespace duckdb {
 
@@ -37,7 +37,6 @@ public:
 	DUCKDB_API unique_ptr<DataChunk> FetchRaw() override;
 	//! Converts the QueryResult to a string
 	DUCKDB_API string ToString() override;
-	int64_t GetRowNumber() override;
 
 public:
 	vector<unique_ptr<ArrowArrayWrapper>> ConsumeArrays();

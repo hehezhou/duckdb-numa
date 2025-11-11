@@ -143,9 +143,8 @@ void ColumnSegment::ScanPartial(ColumnScanState &state, idx_t scan_count, Vector
 // Fetch
 //===--------------------------------------------------------------------===//
 void ColumnSegment::FetchRow(ColumnFetchState &state, row_t row_id, Vector &result, idx_t result_idx) {
-	// fix me
-	// UnsafeNumericCast<int64_t>(UnsafeNumericCast<idx_t>(row_id) - this->start)
-	function.get().fetch_row(*this, state, row_id - this->start, result, result_idx);
+	function.get().fetch_row(*this, state, UnsafeNumericCast<int64_t>(UnsafeNumericCast<idx_t>(row_id) - this->start),
+	                         result, result_idx);
 }
 
 //===--------------------------------------------------------------------===//

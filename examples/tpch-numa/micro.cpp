@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 	int payload_size = atoi(argv[8]);
 
 	// need to change
-	std::string db_file = "/home/yihao/duckdb/origin/duckdb/examples/embedded-c++/release/micro_numa_uncom.db";
+	std::string db_file = "/home/hangrui/numa-join/micro.db";
 	DuckDB db(db_file);
 	Connection con(db);
 	con.Query("SET threads TO " + thread + ";");

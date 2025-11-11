@@ -9,13 +9,12 @@
 #pragma once
 
 #include "duckdb/common/constants.hpp"
-#include "duckdb/common/mutex.hpp"
-#include "duckdb/common/string_util.hpp"
-#include "duckdb/common/vector.hpp"
 #include "duckdb/storage/storage_lock.hpp"
 #include "duckdb/storage/table/segment_lock.hpp"
+#include "duckdb/common/vector.hpp"
+#include "duckdb/common/mutex.hpp"
+#include "duckdb/common/string_util.hpp"
 
-#include <iostream>
 namespace duckdb {
 
 template <class T>
@@ -136,38 +135,6 @@ public:
 	T *GetSegment(SegmentLock &l, idx_t row_number) {
 		return nodes[GetSegmentIndex(l, row_number)].node.get();
 	}
-	T *GetSegmentNode(idx_t node_idx) {
-		return nodes[node_idx].node.get();
-	}
-	T *GetSegmentNode_sequential(idx_t node_idx, idx_t row_id) {
-		node_idx = start_index.size() - 1;
-		for (int i = 0; i < start_index.size(); i++) {
-			if (row_id < start_index[i]) {
-				node_idx = i - 1;
-				break;
-			}
-		}
-		return nodes[node_idx].node.get();
-	}
-	T *GetSegmentNode(idx_t node_idx, idx_t row_id) {
-		auto it = std::lower_bound(start_index.begin(), start_index.end(), row_id);
-		if (it == start_index.end() || (it != start_index.begin() && *it > row_id)) {
-			--it;
-		}
-		node_idx = std::distance(start_index.begin(), it);
-		// std::cout << row_id << "  " << nodes[node_idx].row_start << std::endl;
-		return nodes[node_idx].node.get();
-	}
-
-	T *GetSegmentNode_fixed(idx_t node_idx, idx_t row_id, int32_t string_size) {
-		if (string_size) {
-			// block header and dictionary header
-			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8 - 8) / (string_size + sizeof(int32_t)));
-		} else {
-			node_idx = node_idx / ((DEFAULT_BLOCK_ALLOC_SIZE - 8) / nodes[0].node->type_size);
-		}
-		return nodes[node_idx].node.get();
-	}
 
 	//! Append a column segment to the tree
 	void AppendSegmentInternal(SegmentLock &l, unique_ptr<T> segment) {
@@ -179,9 +146,6 @@ public:
 		SegmentNode<T> node;
 		segment->index = nodes.size();
 		node.row_start = segment->start;
-		if (segment->start < MAX_ROW_ID) {
-			start_index.push_back(segment->start);
-		}
 		node.node = std::move(segment);
 		nodes.push_back(std::move(node));
 	}
@@ -297,11 +261,6 @@ public:
 				throw InternalException("In SegmentTree::Reinitialize - gap found between nodes!");
 			}
 			entry.row_start = offset;
-			if (entry.row_start < MAX_ROW_ID) {
-				start_index.push_back(entry.row_start);
-			}
-			// start_index.push_back(entry.row_start);
-			// std::cout << "reinitialized " << entry.row_start << std::endl;
 			offset += entry.node->count;
 		}
 	}
@@ -314,9 +273,7 @@ protected:
 		return nullptr;
 	}
 
-public:
-	vector<idx_t> start_index;
-
+private:
 	//! The nodes in the tree, can be binary searched
 	vector<SegmentNode<T>> nodes;
 	//! Lock to access or modify the nodes

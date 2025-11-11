@@ -1,14 +1,14 @@
 #include "duckdb/common/types/column/column_data_collection.hpp"
 
 #include "duckdb/common/printer.hpp"
-#include "duckdb/common/serializer/deserializer.hpp"
-#include "duckdb/common/serializer/serializer.hpp"
 #include "duckdb/common/string_util.hpp"
 #include "duckdb/common/types/column/column_data_collection_segment.hpp"
 #include "duckdb/common/types/value_map.hpp"
 #include "duckdb/common/uhugeint.hpp"
 #include "duckdb/common/vector_operations/vector_operations.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
+#include "duckdb/common/serializer/serializer.hpp"
+#include "duckdb/common/serializer/deserializer.hpp"
 
 namespace duckdb {
 
@@ -92,17 +92,6 @@ void ColumnDataCollection::Initialize(vector<LogicalType> types_p) {
 	copy_functions.reserve(types.size());
 	for (auto &type : types) {
 		copy_functions.push_back(GetCopyFunction(type));
-	}
-}
-
-void ColumnDataCollection::InitializeAppend(LogicalType type) {
-	this->types.push_back(type);
-	copy_functions.push_back(GetCopyFunction(type));
-	segments.clear();
-	CreateSegment();
-	auto &segment = *segments.back();
-	if (segment.chunk_data.empty()) {
-		segment.AllocateNewChunk();
 	}
 }
 

@@ -7,8 +7,8 @@ import random
 import string
 import math
 import os
-import duckdb
-import struct
+# import duckdb
+# import struct
 
 # probe_size = 20000000
 #parse the input arguments
@@ -32,7 +32,7 @@ if len(sys.argv)>8:
 #! probe_{size}_{selectivity}_{key_pattern}_{probe_distribution}.csv
 
 #! unique_key_set & non_hit_key_set: {payload_size}, two sets both have more than max {build_size} keys
-file_path = '/home/yihao/duckdb/duckdb-numa/examples/tpch-numa/script/numa_data/'
+file_path = '/home/hangrui/numa-join/no-steal/examples/tpch-numa/script/numa_data/'
 build1_name = f'build_{build_size}'
 build2_name = f'build2_{build_size_2}'
 probe_name = f'probe_{build_size}_{build_size_2}_{probe_size}_{int(sel1*10000)}_{int(sel2*10000)}_{payload_size}'

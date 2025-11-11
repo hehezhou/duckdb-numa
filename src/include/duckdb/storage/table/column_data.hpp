@@ -8,16 +8,16 @@
 
 #pragma once
 
-#include "duckdb/common/enums/scan_vector_type.hpp"
-#include "duckdb/common/mutex.hpp"
-#include "duckdb/common/serializer/serialization_traits.hpp"
 #include "duckdb/common/types/data_chunk.hpp"
-#include "duckdb/storage/data_pointer.hpp"
 #include "duckdb/storage/statistics/base_statistics.hpp"
-#include "duckdb/storage/statistics/segment_statistics.hpp"
-#include "duckdb/storage/table/column_segment_tree.hpp"
+#include "duckdb/storage/data_pointer.hpp"
 #include "duckdb/storage/table/persistent_table_data.hpp"
+#include "duckdb/storage/statistics/segment_statistics.hpp"
 #include "duckdb/storage/table/segment_tree.hpp"
+#include "duckdb/storage/table/column_segment_tree.hpp"
+#include "duckdb/common/mutex.hpp"
+#include "duckdb/common/enums/scan_vector_type.hpp"
+#include "duckdb/common/serializer/serialization_traits.hpp"
 
 namespace duckdb {
 class ColumnData;
@@ -133,8 +133,6 @@ public:
 	//! Fetch a specific row id and append it to the vector
 	virtual void FetchRow(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
 	                      idx_t result_idx);
-	void FetchRowNew(TransactionData transaction, ColumnFetchState &state, row_t row_id, Vector &result,
-	                 idx_t result_idx, int32_t string_size = 0);
 
 	virtual void Update(TransactionData transaction, idx_t column_index, Vector &update_vector, row_t *row_ids,
 	                    idx_t update_count);

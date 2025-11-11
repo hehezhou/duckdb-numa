@@ -211,10 +211,7 @@ static inline void GetRowPointersInternal(DataChunk &keys, TupleDataChunkState &
 	idx_t &match_count = count;
 	match_count = 0;
 
-	idx_t round = 0;
-
 	while (remaining_count > 0) {
-		round++;
 		idx_t salt_match_count = 0;
 		idx_t key_no_match_count = 0;
 
@@ -681,6 +678,7 @@ void JoinHashTable::InsertHashes(Vector &hashes_v, const idx_t count, TupleDataC
 		InsertHashesLoop<false>(atomic_entries, row_locations, hashes_v, count, insert_state, *data_collection, *this);
 	}
 }
+
 
 void JoinHashTable::AllocatePointerTable() {
 	capacity = PointerTableCapacity(Count());

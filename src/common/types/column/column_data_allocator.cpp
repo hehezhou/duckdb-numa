@@ -245,13 +245,19 @@ void ColumnDataAllocator::InitializeChunkState(ChunkManagementState &state, Chun
 		return;
 	}
 	// release any handles that are no longer required
-	for (auto it = state.handles.begin(); it != state.handles.end(); it++) {
-		if (chunk.block_ids.find(NumericCast<uint32_t>(it->first)) != chunk.block_ids.end()) {
-			// still required: do not release
-			continue;
+	bool found_handle;
+	do {
+		found_handle = false;
+		for (auto it = state.handles.begin(); it != state.handles.end(); it++) {
+			if (chunk.block_ids.find(NumericCast<uint32_t>(it->first)) != chunk.block_ids.end()) {
+				// still required: do not release
+				continue;
+			}
+			state.handles.erase(it);
+			found_handle = true;
+			break;
 		}
-		it = state.handles.erase(it);
-	}
+	} while (found_handle);
 
 	// grab any handles that are now required
 	for (auto &block_id : chunk.block_ids) {
