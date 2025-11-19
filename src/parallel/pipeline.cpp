@@ -126,11 +126,11 @@ bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
 		max_threads = active_threads;
 	}
 	Printer::PrintF("task %d %d %d %f", reinterpret_cast<const uint64_t>(event.get()), numa_id, max_threads, GetNow() - numa_test_start);
-	if (numa_id == 0 && max_threads >= active_threads / 2 - 1) {
-		max_threads = active_threads / 2 - 1;
+	if (numa_id == 0 && max_threads >= active_threads / 4 - 1) {
+		max_threads = active_threads / 4 - 1;
 	}
-	if (numa_id == 1 && max_threads >= active_threads / 2) {
-		max_threads = active_threads / 2;
+	if (numa_id == 1 && max_threads >= active_threads / 4) {
+		max_threads = active_threads / 4;
 	}
 	return LaunchScanTasks(event, max_threads);
 }

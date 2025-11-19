@@ -8,8 +8,8 @@
 #include "duckdb/common/numa_config.hpp"
 
 // NUMACONSTANT
-int split_probe_rest;
-int split_probe_rest_start = 2;
+int current_join_id;
+idx_t split_probe_bitmask = 0;
 
 namespace duckdb {
 
@@ -56,7 +56,8 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 	}
 
 	// NUMATODO: config
-	if (--split_probe_rest == 0) {
+	++current_join_id;
+	if (((split_probe_bitmask >> current_join_id) & 1) == 1) {
 		auto breaker_types = op.children[0]->types;
 		auto breaker_estimated_cardinality = op.children[0]->estimated_cardinality;
 		auto breaker = make_uniq<PhysicalPipelineBreaker>(breaker_types, std::move(op.children[0]), breaker_estimated_cardinality);

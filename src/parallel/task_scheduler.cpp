@@ -25,7 +25,7 @@
 
 namespace duckdb {
 
-const idx_t NUM_NUMA = 2;
+const idx_t NUM_NUMA = 4;
 
 struct SchedulerThread {
 #ifndef DUCKDB_NO_THREADS
@@ -57,7 +57,8 @@ struct ConcurrentQueue {
 
 struct QueueProducerToken {
 	explicit QueueProducerToken(ConcurrentQueue &queue)
-		: queue_token{duckdb_moodycamel::ProducerToken(queue.q[0]), duckdb_moodycamel::ProducerToken(queue.q[1])} {
+		: queue_token{duckdb_moodycamel::ProducerToken(queue.q[0]), duckdb_moodycamel::ProducerToken(queue.q[1]),
+					  duckdb_moodycamel::ProducerToken(queue.q[2]), duckdb_moodycamel::ProducerToken(queue.q[3])} {
 	}
 
 	duckdb_moodycamel::ProducerToken queue_token[NUM_NUMA];
@@ -286,10 +287,13 @@ void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
 
 #ifndef DUCKDB_NO_THREADS
 static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker, int cpu_id) {
-	cpu_set_t cpu_mask;
-	CPU_ZERO(&cpu_mask);
-	CPU_SET(cpu_id, &cpu_mask);
-	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
+	int new_cpu_id = cpu_id % 4 * 24 + cpu_id / 4;
+	if (new_cpu_id < 192) {
+		cpu_set_t cpu_mask;
+		CPU_ZERO(&cpu_mask);
+		CPU_SET(new_cpu_id, &cpu_mask);
+		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
+	}
 	scheduler->ExecuteForever(marker, cpu_id);
 }
 #endif

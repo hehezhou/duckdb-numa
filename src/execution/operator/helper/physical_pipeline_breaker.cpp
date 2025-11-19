@@ -6,6 +6,10 @@
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/types/column/column_data_collection_segment.hpp"
 
+#include "duckdb/common/numa_config.hpp"
+
+int next_numa_id;
+
 namespace duckdb {
 
 class ChunkBuffer {
@@ -170,7 +174,7 @@ void PhysicalPipelineBreaker::BuildPipelines(Pipeline &current, MetaPipeline &me
 
 	// we create a new pipeline starting from the child
 	auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipelineWithoutDependency(current, *this);
-	child_meta_pipeline.GetBasePipeline()->numa_id = 1;
+	child_meta_pipeline.GetBasePipeline()->numa_id = ++next_numa_id;
 	child_meta_pipeline.Build(*children[0]);
 }
 

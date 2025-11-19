@@ -4,9 +4,10 @@
 
 #include "sys/time.h"
 
-extern int split_probe_rest;
-extern int split_probe_rest_start;
+extern int current_join_id;
+extern idx_t split_probe_bitmask;
 extern double numa_test_start;
+extern int next_numa_id;
 
 static double GetNow() {
 	struct timeval tv;
@@ -15,6 +16,7 @@ static double GetNow() {
 }
 
 static void InitParams() {
-    split_probe_rest = split_probe_rest_start;
+	current_join_id = 0;
+	next_numa_id = 0;
     numa_test_start = GetNow();
 }
