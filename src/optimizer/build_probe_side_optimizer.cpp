@@ -9,6 +9,11 @@
 #include "duckdb/planner/operator/logical_get.hpp"
 #include "duckdb/planner/operator/logical_join.hpp"
 
+#include "duckdb/common/numa_config.hpp"
+
+int swap_bitmask_start = 4581;
+int swap_bitmask;
+
 namespace duckdb {
 
 static void GetRowidBindings(LogicalOperator &op, vector<ColumnBinding> &bindings) {
@@ -180,6 +185,11 @@ void BuildProbeSideOptimizer::TryFlipJoinChildren(LogicalOperator &op) {
 			swap = !swap;
 		}
 	}
+
+	if (swap_bitmask & 1) {
+		swap = !swap;
+	}
+	swap_bitmask >>= 1;
 
 	if (swap) {
 		FlipChildren(op);

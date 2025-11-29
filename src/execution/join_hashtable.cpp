@@ -7,7 +7,35 @@
 #include "duckdb/main/client_context.hpp"
 #include "duckdb/storage/buffer_manager.hpp"
 
+#include <numa.h>
+#include <numaif.h>
+
+
 namespace duckdb {
+class NumaBufferPool {
+public:
+	void *allocate(idx_t capacity, int numa_id) {
+		std::lock_guard<std::mutex> guard(latch);
+		auto ite = pool[numa_id].lower_bound(capacity);
+		if (ite != pool[numa_id].end() && ite->first == capacity) {
+			auto result = ite->second;
+			pool[numa_id].erase(ite);
+			return result;
+		}
+		return numa_alloc_onnode(capacity, numa_id);
+	}
+	void free(void *ptr, idx_t capacity, int numa_id) {
+		if (ptr == nullptr) {
+			return;
+		}
+		std::lock_guard<std::mutex> guard(latch);
+		pool[numa_id].insert(std::make_pair(capacity, ptr));
+	}
+private:
+	std::mutex latch;
+	std::multimap<idx_t, void*> pool[2];
+} numa_pool;
+
 using ValidityBytes = JoinHashTable::ValidityBytes;
 using ScanStructure = JoinHashTable::ScanStructure;
 using ProbeSpill = JoinHashTable::ProbeSpill;
@@ -34,7 +62,7 @@ JoinHashTable::JoinHashTable(ClientContext &context, const vector<JoinCondition>
     : buffer_manager(BufferManager::GetBufferManager(context)), conditions(conditions_p),
       build_types(std::move(btypes)), output_columns(output_columns_p), entry_size(0), tuple_size(0),
       vfound(Value::BOOLEAN(false)), join_type(type_p), finalized(false), has_null(false),
-      radix_bits(INITIAL_RADIX_BITS), partition_start(0), partition_end(0) {
+      radix_bits(INITIAL_RADIX_BITS), partition_start(0), partition_end(0), entries(nullptr) {
 	for (idx_t i = 0; i < conditions.size(); ++i) {
 		auto &condition = conditions[i];
 		D_ASSERT(condition.left->return_type == condition.right->return_type);
@@ -111,6 +139,8 @@ JoinHashTable::JoinHashTable(ClientContext &context, const vector<JoinCondition>
 }
 
 JoinHashTable::~JoinHashTable() {
+	numa_pool.free(entries, sizeof(ht_entry_t[capacity]), numa_id);
+	entries = nullptr;
 }
 
 void JoinHashTable::Merge(JoinHashTable &other) {
@@ -680,25 +710,19 @@ void JoinHashTable::InsertHashes(Vector &hashes_v, const idx_t count, TupleDataC
 }
 
 
-void JoinHashTable::AllocatePointerTable() {
+void JoinHashTable::AllocatePointerTable(int numa_id) {
 	capacity = PointerTableCapacity(Count());
 	D_ASSERT(IsPowerOfTwo(capacity));
 
 	if (hash_map.get()) {
-		// There is already a hash map
-		auto current_capacity = hash_map.GetSize() / sizeof(ht_entry_t);
-		if (capacity > current_capacity) {
-			// Need more space
-			hash_map = buffer_manager.GetBufferAllocator().Allocate(capacity * sizeof(ht_entry_t));
-			entries = reinterpret_cast<ht_entry_t *>(hash_map.get());
-		} else {
-			// Just use the current hash map
-			capacity = current_capacity;
-		}
+		throw InternalException("reuse join hash table (forbidden by project)");
 	} else {
 		// Allocate a hash map
-		hash_map = buffer_manager.GetBufferAllocator().Allocate(capacity * sizeof(ht_entry_t));
-		entries = reinterpret_cast<ht_entry_t *>(hash_map.get());
+		// hash_map = buffer_manager.GetBufferAllocator().Allocate(capacity * sizeof(ht_entry_t));
+		// entries = reinterpret_cast<ht_entry_t *>(hash_map.get());
+		// entries = (ht_entry_t*)numa_alloc_onnode(sizeof(ht_entry_t[capacity]), numa_id);
+		entries = (ht_entry_t*)numa_pool.allocate(sizeof(ht_entry_t[capacity]), numa_id);
+		this->numa_id = numa_id;
 	}
 	D_ASSERT(hash_map.GetSize() == capacity * sizeof(ht_entry_t));
 
@@ -1430,6 +1454,9 @@ void JoinHashTable::Reset() {
 	data_collection->Reset();
 	hash_map.Reset();
 	finalized = false;
+	// numa_free(entries, sizeof(ht_entry_t[capacity]));
+	numa_pool.free(entries, sizeof(ht_entry_t[capacity]), numa_id);
+	entries = nullptr;
 }
 
 bool JoinHashTable::PrepareExternalFinalize(const idx_t max_ht_size) {
