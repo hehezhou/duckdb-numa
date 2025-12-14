@@ -169,7 +169,7 @@ void PhysicalPipelineBreaker::BuildPipelines(Pipeline &current, MetaPipeline &me
 	state.SetPipelineSource(current, *this);
 
 	// we create a new pipeline starting from the child
-	auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipelineWithoutDependency(current, *this);
+	auto &child_meta_pipeline = meta_pipeline.CreateConcurrentChildMetaPipeline(current, *this);
 	child_meta_pipeline.GetBasePipeline()->numa_id = 1;
 	child_meta_pipeline.Build(*children[0]);
 }
