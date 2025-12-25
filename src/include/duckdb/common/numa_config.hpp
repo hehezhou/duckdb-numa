@@ -7,6 +7,8 @@
 extern int split_probe_rest;
 extern int split_probe_rest_start;
 extern double numa_test_start;
+extern int swap_bitmask_start;
+extern int swap_bitmask;
 
 static double GetNow() {
 	struct timeval tv;
@@ -16,5 +18,6 @@ static double GetNow() {
 
 static void InitParams() {
     split_probe_rest = split_probe_rest_start;
+    swap_bitmask = swap_bitmask_start;
     numa_test_start = GetNow();
 }

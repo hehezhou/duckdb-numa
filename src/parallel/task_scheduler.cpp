@@ -279,10 +279,13 @@ void TaskScheduler::ExecuteTasks(idx_t max_tasks) {
 
 #ifndef DUCKDB_NO_THREADS
 static void ThreadExecuteTasks(TaskScheduler *scheduler, atomic<bool> *marker, int cpu_id) {
-	cpu_set_t cpu_mask;
-	CPU_ZERO(&cpu_mask);
-	CPU_SET(cpu_id, &cpu_mask);
-	pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
+	if (cpu_id < 96) {
+		cpu_id = cpu_id / 48 + cpu_id % 48 * 2;
+		cpu_set_t cpu_mask;
+		CPU_ZERO(&cpu_mask);
+		CPU_SET(cpu_id, &cpu_mask);
+		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_mask);
+	}
 	scheduler->ExecuteForever(marker, cpu_id);
 }
 #endif
