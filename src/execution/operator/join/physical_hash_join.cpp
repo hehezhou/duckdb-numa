@@ -462,7 +462,7 @@ public:
 		// 	void *pages;
 		// 	int status;
 		// 	pages = entries + i;
-		// 	long ret = syscall(SYS_move_pages, 0, 4, &pages, NULL, &status, 0);
+		// 	long ret = syscall(SYS_move_pages, 0, 1, &pages, NULL, &status, 0);
 		// 	if (ret < 0) {
 		// 		perror("move_pages");
 		// 	}
