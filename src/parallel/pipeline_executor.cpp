@@ -199,7 +199,7 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 		} else if (!exhausted_source || next_batch_blocked) {
 			SourceResultType source_result;
 			if (!next_batch_blocked) {
-				// "Regular" path: fetch a chunk from the source and push it through the pipeline
+				// "Regular" path: fetch a chunk from the source and push it through the pipeline				
 				if (max_chunks == 0) {
 					break;
 				}
@@ -432,7 +432,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 				FinishProcessing(NumericCast<int32_t>(current_idx));
 				return OperatorResultType::FINISHED;
 			}
-			// current_chunk.Verify();
+			current_chunk.Verify();
 		}
 
 		if (current_chunk.size() == 0) {

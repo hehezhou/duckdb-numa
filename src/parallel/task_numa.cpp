@@ -19,7 +19,7 @@ void TaskNUMA::Register(ConcurrentQueue *queue) {
 }
 
 void TaskNUMA::Finish() {
-    Printer::PrintF("FINISH %f", GetNow() - numa_test_start);
+    // Printer::PrintF("FINISH %f", GetNow() - numa_test_start);
     bool expected = false;
     if (!finished.compare_exchange_strong(expected, true)) {
         return;

@@ -23,6 +23,8 @@
 #include "duckdb/storage/storage_manager.hpp"
 #include "duckdb/storage/temporary_memory_manager.hpp"
 
+#include "duckdb/common/numa_config.hpp"
+
 namespace duckdb {
 
 PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
@@ -355,7 +357,7 @@ public:
 	}
 
 	TaskExecutionResult Execute(TaskNUMAExecutionMode mode, idx_t cpu_id) override {
-		do {
+		while (true) {
 			idx_t task_id = next_task.fetch_add(1, std::memory_order_relaxed);
 			if (task_id >= tasks.size()) {
 				return TaskExecutionResult::TASK_FINISHED;
@@ -366,8 +368,7 @@ public:
 				Finish();
 				return TaskExecutionResult::TASK_FINISHED;
 			}
-		} while (mode == TaskNUMAExecutionMode::PROCESS_LOCAL);
-		return TaskExecutionResult::TASK_NOT_FINISHED;
+		}
 	}
 
 	bool TrySteal() override { return false; }
@@ -389,6 +390,7 @@ public:
 
 public:
 	void Schedule() override {
+		Printer::PrintF("init task %d %d %f", reinterpret_cast<const uint64_t>(this), pipeline->numa_id, GetNow() - numa_test_start);
 		auto &context = pipeline->GetClientContext();
 
 		vector<std::tuple<idx_t, idx_t>> init_tasks;
@@ -415,8 +417,11 @@ public:
 		}
 		SetTaskNUMA(new HashJoinTableInitTaskNUMA(*pipeline, shared_from_this(), sink, std::move(init_tasks), pipeline->numa_id));
 	}
+	void FinishEvent() override {
+		Printer::PrintF("init task end %d %f", reinterpret_cast<const uint64_t>(this), GetNow() - numa_test_start);
+	}
 
-	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
+	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 262144;
 };
 
 class HashJoinFinalizeTaskNUMA : public TaskNUMA {
@@ -441,7 +446,7 @@ public:
 			return TaskExecutionResult::TASK_FINISHED;
 		}
 		auto [chunk_idx_from, chunk_idx_to] = tasks[task_id];
-		sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, true);
+		sink.hash_table->Finalize(chunk_idx_from, chunk_idx_to, tasks.size() != 1);
 		if (finished_task.fetch_add(1, std::memory_order_acquire) + 1 == tasks.size()) {
 			Finish();
 			return TaskExecutionResult::TASK_FINISHED;
@@ -480,7 +485,7 @@ public:
 
 private:
 	HashJoinGlobalSinkState &sink;
-	vector<std::tuple<idx_t, idx_t>> tasks;
+	const vector<std::tuple<idx_t, idx_t>> tasks;
 	std::atomic<idx_t> next_task{0};
 	std::atomic<idx_t> finished_task{0};
 	std::atomic<idx_t> rest_task;
@@ -496,6 +501,7 @@ public:
 
 public:
 	void Schedule() override {
+		Printer::PrintF("build task %d %d %f", reinterpret_cast<const uint64_t>(this), pipeline->numa_id, GetNow() - numa_test_start);
 		auto &context = pipeline->GetClientContext();
 
 		vector<std::tuple<idx_t, idx_t>> finalize_tasks;
@@ -527,9 +533,10 @@ public:
 	void FinishEvent() override {
 		sink.hash_table->GetDataCollection().VerifyEverythingPinned();
 		sink.hash_table->finalized = true;
+		Printer::PrintF("build task end %d %f", reinterpret_cast<const uint64_t>(this), GetNow() - numa_test_start);
 	}
 
-	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 1048576;
+	static constexpr const idx_t PARALLEL_CONSTRUCT_THRESHOLD = 262144;
 };
 
 void HashJoinGlobalSinkState::ScheduleFinalize(Pipeline &pipeline, Event &event) {
