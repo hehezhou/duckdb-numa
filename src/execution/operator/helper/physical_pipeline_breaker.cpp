@@ -137,6 +137,7 @@ public:
 	}
 public:
 	ChunkManagementState scan_state;
+	BreakerChunkReference chunk_ref;
 };
 
 unique_ptr<LocalSourceState> PhysicalPipelineBreaker::GetLocalSourceState(ExecutionContext &context,
@@ -147,7 +148,7 @@ unique_ptr<LocalSourceState> PhysicalPipelineBreaker::GetLocalSourceState(Execut
 SourceResultType PhysicalPipelineBreaker::GetData(ExecutionContext &context, DataChunk &chunk,
                                                   OperatorSourceInput &input) const {
 	auto &lstate = input.local_state.Cast<PipelineBreakerLocalSource>();
-	BreakerChunkReference chunk_ref;
+	auto &chunk_ref = lstate.chunk_ref;
 	if (chunk_queue->TryDequeue(chunk_ref)) {
 		chunk_ref.buffer->Scan(chunk_ref.chunk_meta, chunk, lstate.scan_state);
 		return SourceResultType::HAVE_MORE_OUTPUT;
@@ -169,7 +170,7 @@ void PhysicalPipelineBreaker::BuildPipelines(Pipeline &current, MetaPipeline &me
 	state.SetPipelineSource(current, *this);
 
 	// we create a new pipeline starting from the child
-	auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipelineWithoutDependency(current, *this);
+	auto &child_meta_pipeline = meta_pipeline.CreateConcurrentChildMetaPipeline(current, *this);
 	child_meta_pipeline.GetBasePipeline()->numa_id = 1;
 	child_meta_pipeline.Build(*children[0]);
 }

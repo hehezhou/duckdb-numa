@@ -64,10 +64,6 @@ idx_t RowGroupCollection::GetTotalRows() const {
 	return total_rows.load();
 }
 
-idx_t RowGroupCollection::GetStartRow() {
-	return row_start;
-}
-
 const vector<LogicalType> &RowGroupCollection::GetTypes() const {
 	return types;
 }

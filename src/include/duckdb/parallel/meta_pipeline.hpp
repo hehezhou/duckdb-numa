@@ -91,8 +91,8 @@ public:
 	MetaPipeline &CreateChildMetaPipeline(Pipeline &current, PhysicalOperator &op,
 	                                      MetaPipelineType type = MetaPipelineType::REGULAR);
 
-	MetaPipeline &CreateChildMetaPipelineWithoutDependency(Pipeline &current, PhysicalOperator &op,
-	                                      				   MetaPipelineType type = MetaPipelineType::REGULAR);
+	MetaPipeline &CreateConcurrentChildMetaPipeline(Pipeline &current, PhysicalOperator &op,
+	                                      			MetaPipelineType type = MetaPipelineType::REGULAR);
 
 private:
 	//! The executor for all MetaPipelines in the query plan

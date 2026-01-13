@@ -11,7 +11,6 @@
 #include "duckdb/common/common.hpp"
 
 namespace duckdb {
-
 class ClientContext;
 class Executor;
 class Task;

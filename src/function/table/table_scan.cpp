@@ -9,7 +9,6 @@
 #include "duckdb/function/function_set.hpp"
 #include "duckdb/main/attached_database.hpp"
 #include "duckdb/main/client_config.hpp"
-#include "duckdb/main/client_data.hpp"
 #include "duckdb/optimizer/matcher/expression_matcher.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "duckdb/planner/expression_iterator.hpp"
@@ -18,6 +17,7 @@
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/transaction/local_storage.hpp"
+#include "duckdb/main/client_data.hpp"
 
 namespace duckdb {
 
@@ -121,12 +121,6 @@ static void TableScanFunc(ClientContext &context, TableFunctionInput &data_p, Da
 	auto &state = data_p.local_state->Cast<TableScanLocalState>();
 	auto &transaction = DuckTransaction::Get(context, bind_data.table.catalog);
 	auto &storage = bind_data.table.GetStorage();
-	bool mat_flag = data_p.mat_flag;
-	if (mat_flag) {
-		storage.Select(transaction, output, state.scan_state, data_p.rowid_column_id, data_p.materialize_col_id,
-		               data_p.fixed_len_strings_columns);
-		return;
-	}
 
 	state.scan_state.options.force_fetch_row = ClientConfig::GetConfig(context).force_fetch_row;
 	do {

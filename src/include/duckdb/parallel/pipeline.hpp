@@ -9,16 +9,14 @@
 #pragma once
 
 #include "duckdb/common/atomic.hpp"
-#include "duckdb/common/reference_map.hpp"
-#include "duckdb/common/set.hpp"
 #include "duckdb/common/unordered_set.hpp"
+#include "duckdb/common/set.hpp"
 #include "duckdb/common/numa_config.hpp"
 #include "duckdb/execution/physical_operator.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/parallel/task_numa.hpp"
-#include "duckdb/parallel/executor_task.hpp"
 #include "duckdb/parallel/task_scheduler.hpp"
-#include "duckdb/storage/table/row_group_collection.hpp"
+#include "duckdb/parallel/executor_task.hpp"
 
 namespace duckdb {
 
@@ -123,6 +121,7 @@ public:
 	ClientContext &GetClientContext();
 
 	void AddDependency(shared_ptr<Pipeline> &pipeline);
+	void AddRuntimeDependency(shared_ptr<Pipeline> &pipeline);
 
 	void Ready();
 	void Reset();
@@ -160,36 +159,7 @@ public:
 	//! Updates the batch index of a pipeline (and returns the new minimum batch index)
 	idx_t UpdateBatchIndex(idx_t old_index, idx_t new_index);
 
-	void SetMaterializeSource(shared_ptr<RowGroupCollection> table, optional_ptr<PhysicalOperator> op,
-	                          unique_ptr<GlobalSourceState> state, unique_ptr<LocalSourceState> local_state) {
-		mat_table = table;
-		materialize_source = op;
-		materialize_source_state = move(state);
-		materialize_local_source_state = move(local_state);
-	}
-
-	void SetMaterializeMap(int col_idx, unordered_map<int64_t, int64_t> colid, map<int64_t, int8_t> types,
-	                       unordered_map<int64_t, int32_t> string_columns) {
-		rowid_col_idx = col_idx;
-		materialize_column_ids = move(colid);
-		materialize_column_types = move(types);
-		fixed_len_strings_columns = move(string_columns);
-		materialize_flag = true;
-	}
-
-	bool materialize_flag = false;
-	std::mutex mat_lock;
-	int thread_num = 0;
-	void incrementOperatorTime(double time, int op_idx) {
-		operator_total_time[op_idx] += time;
-	}
-
-	vector<double> operator_total_time;
-	double mat_operator_time = 0;
-	double total_time = 0;
-
 	idx_t numa_id;
-
 private:
 	//! Whether or not the pipeline has been readied
 	bool ready;
@@ -197,19 +167,8 @@ private:
 	atomic<bool> initialized;
 	//! The source of this pipeline
 	optional_ptr<PhysicalOperator> source;
-
-	optional_ptr<PhysicalOperator> materialize_source;
-	unique_ptr<GlobalSourceState> materialize_source_state;
-	unique_ptr<LocalSourceState> materialize_local_source_state;
-	shared_ptr<RowGroupCollection> mat_table;
-	unordered_map<int64_t, int64_t> materialize_column_ids;
-	map<int64_t, int8_t> materialize_column_types;
-	unordered_map<int64_t, int32_t> fixed_len_strings_columns;
-	int rowid_col_idx;
-
 	//! The chain of intermediate operators
 	vector<reference<PhysicalOperator>> operators;
-
 	//! The sink (i.e. destination) for data; this is e.g. a hash table to-be-built
 	optional_ptr<PhysicalOperator> sink;
 
@@ -220,6 +179,8 @@ private:
 	vector<weak_ptr<Pipeline>> parents;
 	//! The dependencies of this pipeline
 	vector<weak_ptr<Pipeline>> dependencies;
+
+	vector<weak_ptr<Pipeline>> runtime_dependencies;
 
 	//! The base batch index of this pipeline
 	idx_t base_batch_index = 0;

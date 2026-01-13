@@ -36,7 +36,6 @@ public:
 	DUCKDB_API unique_ptr<DataChunk> FetchRaw() override;
 	//! Converts the QueryResult to a string
 	DUCKDB_API string ToString() override;
-	int64_t GetRowNumber() override;
 	DUCKDB_API string ToBox(ClientContext &context, const BoxRendererConfig &config) override;
 
 	//! Gets the (index) value of the (column index) column.

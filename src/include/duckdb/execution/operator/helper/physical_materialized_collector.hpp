@@ -8,9 +8,9 @@
 
 #pragma once
 
-#include "duckdb/common/types/column/column_data_collection.hpp"
-#include "duckdb/common/types/column/column_data_scan_states.hpp"
 #include "duckdb/execution/operator/helper/physical_result_collector.hpp"
+#include "duckdb/common/types/column/column_data_scan_states.hpp"
+#include "duckdb/common/types/column/column_data_collection.hpp"
 
 namespace duckdb {
 
@@ -49,7 +49,6 @@ class MaterializedCollectorLocalState : public LocalSinkState {
 public:
 	unique_ptr<ColumnDataCollection> collection;
 	ColumnDataAppendState append_state;
-	bool set_output = false;
 };
 
 } // namespace duckdb

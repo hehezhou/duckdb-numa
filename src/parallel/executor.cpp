@@ -203,6 +203,19 @@ void Executor::ScheduleEventsInternal(ScheduleEventData &event_data) {
 			auto &dep_entry = event_map_entry->second;
 			entry.second.pipeline_event.AddDependency(dep_entry.pipeline_complete_event);
 		}
+		auto &current_event = dynamic_cast<PipelineEvent&>(entry.second.pipeline_event);
+		for (auto &dependency : pipeline.runtime_dependencies) {
+			auto dep = dependency.lock();
+			D_ASSERT(dep);
+			auto event_map_entry = event_map.find(*dep);
+			if (event_map_entry == event_map.end()) {
+				continue;
+			}
+			D_ASSERT(event_map_entry != event_map.end());
+			auto &dep_entry = event_map_entry->second;
+			auto &dependency_event = dynamic_cast<PipelineEvent&>(dep_entry.pipeline_event);
+			current_event.AddRuntimeDependency(dependency_event);
+		}
 	}
 
 	// set the dependencies for pipeline event
@@ -402,8 +415,6 @@ void Executor::InitializeInternal(PhysicalOperator &plan) {
 		// build and ready the pipelines
 		PipelineBuildState state;
 		auto root_pipeline = make_shared_ptr<MetaPipeline>(*this, state, nullptr);
-
-		numa_test_start = GetNow();
 		InitParams();
 		auto &ts = TaskScheduler::GetScheduler(this->context);
 		ts.NUMAInit();

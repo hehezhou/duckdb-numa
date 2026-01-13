@@ -1,35 +1,18 @@
 #include "duckdb/parallel/pipeline_executor.hpp"
 
-#include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/common/limits.hpp"
-#include "duckdb/execution/operator/join/physical_hash_join.hpp"
-#include "duckdb/execution/operator/scan/physical_table_scan.hpp"
-#include "duckdb/function/table/table_scan.hpp"
 #include "duckdb/main/client_context.hpp"
-
-#include <fstream>
-#include <iostream>
-#include <sys/time.h>
-#include <thread>
 
 #ifdef DUCKDB_DEBUG_ASYNC_SINK_SOURCE
 #include <chrono>
 #include <thread>
 #endif
 
-bool print_tag = false;
-
 namespace duckdb {
-double getNow() {
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
-}
 
 PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_p)
     : pipeline(pipeline_p), thread(context_p), context(context_p, thread, &pipeline_p) {
 	D_ASSERT(pipeline.source_state);
-	int num = 0;
 	if (pipeline.sink) {
 		local_sink_state = pipeline.sink->GetLocalSinkState(context);
 		requires_batch_index = pipeline.sink->RequiresBatchIndex() && pipeline.source->SupportsBatchIndex();
@@ -40,78 +23,17 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			partition_info.batch_index = pipeline.RegisterNewBatchIndex();
 			partition_info.min_batch_index = partition_info.batch_index;
 		}
-		if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN ||
-		    pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
-			std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/config_num", std::ios::in);
-			if (file.is_open()) {
-				file >> num;
-				file.close();
-			}
-			pipeline.thread_num = num;
-		}
 	}
-	pipeline.mat_lock.lock();
-	if (pipeline.operator_total_time.empty()) {
-		pipeline.operator_total_time.reserve(pipeline.operators.size() + 1);
-		for (idx_t i = 0; i < pipeline.operators.size() + 1; i++) {
-			pipeline.operator_total_time.push_back(0);
-		}
-	}
-	pipeline.mat_lock.unlock();
-
 	local_source_state = pipeline.source->GetLocalSourceState(context, *pipeline.source_state);
 
 	intermediate_chunks.reserve(pipeline.operators.size());
 	intermediate_states.reserve(pipeline.operators.size());
 	for (idx_t i = 0; i < pipeline.operators.size(); i++) {
-		if (pipeline.operators[i].get().type == PhysicalOperatorType::HASH_JOIN) {
-			auto &state = pipeline.operators[i].get().sink_state->Cast<HashJoinGlobalSinkState>();
-			pipeline.mat_lock.lock();
-			if (state.mat_table && state.source_state) {
-
-				if (pipeline.thread_num == num) {
-					pipeline.thread_num--;
-					pipeline.SetMaterializeSource(move(state.mat_table), state.source, move(state.source_state),
-					                              move(state.local_source_state));
-					if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR) {
-						std::ifstream file("/home/yihao/duckdb/ht/duckdb/examples/embedded-c++/config", std::ios::in);
-						unordered_map<int64_t, int64_t> col_map;
-						map<int64_t, int8_t> col_types;
-						unordered_map<int64_t, int32_t> fixed_len_strings_columns;
-						int rowid_col_idx;
-						if (file.is_open()) {
-							idx_t table_col_idx;
-							idx_t result_col_idx;
-							int logical_type;
-							int string_length = 0;
-
-							file >> rowid_col_idx;
-
-							while (file >> table_col_idx >> result_col_idx >> logical_type) {
-								col_map[table_col_idx] = result_col_idx;
-								col_types[result_col_idx] = logical_type;
-								if (LogicalTypeId(logical_type) == LogicalTypeId::VARCHAR) {
-									file >> string_length;
-									fixed_len_strings_columns[result_col_idx] = string_length;
-								}
-							}
-							file.close();
-						}
-
-						if (!col_map.empty() && !pipeline.materialize_flag) {
-							pipeline.SetMaterializeMap(rowid_col_idx, col_map, col_types, fixed_len_strings_columns);
-						}
-					}
-				}
-			}
-			pipeline.mat_lock.unlock();
-		}
 		auto &prev_operator = i == 0 ? *pipeline.source : pipeline.operators[i - 1].get();
 		auto &current_operator = pipeline.operators[i].get();
 
 		auto chunk = make_uniq<DataChunk>();
 		chunk->Initialize(Allocator::Get(context.client), prev_operator.GetTypes());
-
 		intermediate_chunks.push_back(std::move(chunk));
 
 		auto op_state = current_operator.GetOperatorState(context);
@@ -123,15 +45,6 @@ PipelineExecutor::PipelineExecutor(ClientContext &context_p, Pipeline &pipeline_
 			FinishProcessing();
 		}
 	}
-
-	if (pipeline.materialize_flag) {
-		auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
-		auto types = last_op.GetTypes();
-		auto chunk = make_uniq<DataChunk>();
-		chunk->Initialize(Allocator::Get(context.client), types);
-		intermediate_chunks.push_back(std::move(chunk));
-	}
-
 	InitializeChunk(final_chunk);
 }
 
@@ -150,8 +63,8 @@ bool PipelineExecutor::TryFlushCachingOperators() {
 			continue;
 		}
 
-		// This slightly awkward way of increasing the flushing idx is to make the code re-entrant: We need to call
-		// this method again in the case of a Sink returning BLOCKED.
+		// This slightly awkward way of increasing the flushing idx is to make the code re-entrant: We need to call this
+		// method again in the case of a Sink returning BLOCKED.
 		if (!should_flush_current_idx && in_process_operators.empty()) {
 			should_flush_current_idx = true;
 			flushing_idx++;
@@ -256,7 +169,6 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 	D_ASSERT(pipeline.sink);
 	auto &source_chunk = pipeline.operators.empty() ? final_chunk : *intermediate_chunks[0];
 	while (true) {
-		double start = getNow();
 		if (context.client.interrupted) {
 			throw InterruptException();
 		}
@@ -271,8 +183,8 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 			remaining_sink_chunk = false;
 		} else if (!in_process_operators.empty() && !started_flushing) {
 			// The pipeline was interrupted by the Sink when pushing a source chunk through the pipeline. We need to
-			// re-push the same source chunk through the pipeline because there are in_process operators, meaning
-			// that the result for the pipeline
+			// re-push the same source chunk through the pipeline because there are in_process operators, meaning that
+			// the result for the pipeline
 			D_ASSERT(source_chunk.size() > 0);
 			result = ExecutePushInternal(source_chunk);
 		} else if (exhausted_source && !next_batch_blocked && !done_flushing) {
@@ -330,8 +242,6 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 		if (result == OperatorResultType::FINISHED) {
 			break;
 		}
-		double end = getNow();
-		pipeline.total_time += end - start;
 	}
 
 	if ((!exhausted_source || !done_flushing) && !IsFinished()) {
@@ -399,12 +309,9 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 			StartOperator(*pipeline.sink);
 			D_ASSERT(pipeline.sink);
 			D_ASSERT(pipeline.sink->sink_state);
-			OperatorSinkInput sink_input {*pipeline.sink->sink_state, *local_sink_state, interrupt_state,
-			                              pipeline.materialize_flag, pipeline.materialize_column_types};
-			double sink_start = getNow();
+			OperatorSinkInput sink_input {*pipeline.sink->sink_state, *local_sink_state, interrupt_state};
+
 			auto sink_result = Sink(sink_chunk, sink_input);
-			double sink_end = getNow();
-			pipeline.incrementOperatorTime(sink_end - sink_start, pipeline.operators.size());
 
 			EndOperator(*pipeline.sink, nullptr);
 
@@ -456,43 +363,9 @@ PipelineExecuteResult PipelineExecutor::PushFinalize() {
 	for (idx_t i = 0; i < intermediate_states.size(); i++) {
 		intermediate_states[i]->Finalize(pipeline.operators[i].get(), context);
 	}
-	pipeline.mat_lock.lock();
-	if (pipeline.sink->type == PhysicalOperatorType::HASH_JOIN) {
-		pipeline.thread_num--;
-		if (pipeline.thread_num == 0) {
-			pipeline.sink->sink_state->Cast<HashJoinGlobalSinkState>().SetSource(
-			    pipeline.source.get()
-			        ->Cast<PhysicalTableScan>()
-			        .bind_data->Cast<TableScanBindData>()
-			        .table.GetDataTable()
-			        ->GetRowGroupCollection(),
-			    pipeline.source, move(pipeline.source_state), move(local_source_state));
-		}
-	}
-
-	bool print = pipeline.operators.size() > 0 || pipeline.sink->type != PhysicalOperatorType::CREATE_TABLE_AS;
-	if (!print_tag) print = false;
-	if (print) {
-		std::cout << "----------------------------" << std::endl;
-		for (int i = 0; i < pipeline.operator_total_time.size() - 1; i++) {
-			std::cout << "Operator " << PhysicalOperatorToString(pipeline.operators[i].get().type)
-			          << " time: " << pipeline.operator_total_time[i] << std::endl;
-		}
-		if (pipeline.sink) {
-			std::cout << "Sink operator " << PhysicalOperatorToString(pipeline.sink.get()->type)
-			          << " time: " << pipeline.operator_total_time[pipeline.operator_total_time.size() - 1]
-			          << std::endl;
-		}
-		if (pipeline.materialize_flag) {
-			std::cout << "Materialize operator time: " << pipeline.mat_operator_time << std::endl;
-		}
-		std::cout << "----------------------------" << std::endl;
-		std::cout << "Total time: " << pipeline.total_time << std::endl;
-	}
-	pipeline.mat_lock.unlock();
-
 	pipeline.executor.Flush(thread);
 	local_sink_state.reset();
+
 	return PipelineExecuteResult::FINISHED;
 }
 
@@ -544,49 +417,17 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			auto operator_idx = current_idx - 1;
 			auto &current_operator = pipeline.operators[operator_idx].get();
 
-			// if current_idx > source_idx, we pass the previous operators' output through the Execute of the
-			// current operator
+			// if current_idx > source_idx, we pass the previous operators' output through the Execute of the current
+			// operator
 			StartOperator(current_operator);
-			double op_start = getNow();
-			auto op_result = current_operator.Execute(context, prev_chunk, current_chunk, *current_operator.op_state,
+			auto result = current_operator.Execute(context, prev_chunk, current_chunk, *current_operator.op_state,
 			                                          *intermediate_states[current_intermediate - 1]);
-			double op_end = getNow();
-			pipeline.incrementOperatorTime(op_end - op_start, operator_idx);
-			if (pipeline.materialize_flag && operator_idx == pipeline.operators.size() - 1) {
-				double mat_start = getNow();
-				OperatorSourceInput source_input = {*pipeline.materialize_source_state,
-				                                    *pipeline.materialize_local_source_state,
-				                                    interrupt_state,
-				                                    true,
-				                                    pipeline.rowid_col_idx,
-				                                    pipeline.materialize_column_ids,
-				                                    pipeline.fixed_len_strings_columns};
-				// std::cout << std::this_thread::get_id() << " " << pipeline.materialize_column_ids.size() << " "
-				//           << pipeline.materialize_column_types.size() << " "
-				//           << (pipeline.materialize_source_state != nullptr) << " "
-				//           << (pipeline.materialize_local_source_state != nullptr) << " " <<
-				//           current_chunk.ColumnCount()
-				//           << " " << result.ColumnCount() << std::endl;
-				// result.ReferenceColumns(current_chunk, {0, 1});
-				for (idx_t col_idx = 0; col_idx < current_chunk.ColumnCount(); col_idx++) {
-					auto &other_col = current_chunk.data[col_idx];
-					auto &this_col = result.data[col_idx];
-					D_ASSERT(other_col.GetType() == this_col.GetType());
-					this_col.Reference(other_col);
-				}
-				result.SetCardinality(current_chunk.size());
-				auto res = pipeline.materialize_source->GetData(context, result, source_input);
-				// std::cout << "get data!" << result.size() << std::endl;
-				double mat_end = getNow();
-				pipeline.mat_operator_time += mat_end - mat_start;
-			}
-
 			EndOperator(current_operator, &current_chunk);
-			if (op_result == OperatorResultType::HAVE_MORE_OUTPUT) {
+			if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
 				// more data remains in this operator
 				// push in-process marker
 				in_process_operators.push(current_idx);
-			} else if (op_result == OperatorResultType::FINISHED) {
+			} else if (result == OperatorResultType::FINISHED) {
 				D_ASSERT(current_chunk.size() == 0);
 				FinishProcessing(NumericCast<int32_t>(current_idx));
 				return OperatorResultType::FINISHED;
@@ -677,18 +518,7 @@ SourceResultType PipelineExecutor::FetchFromSource(DataChunk &result) {
 
 void PipelineExecutor::InitializeChunk(DataChunk &chunk) {
 	auto &last_op = pipeline.operators.empty() ? *pipeline.source : pipeline.operators.back().get();
-	auto types = last_op.GetTypes();
-	if (pipeline.sink) {
-		if (pipeline.sink->type == PhysicalOperatorType::RESULT_COLLECTOR && pipeline.operators.size() > 0) {
-			pipeline.mat_lock.lock();
-			for (auto &[col_id, type] : pipeline.materialize_column_types) {
-				types.push_back(LogicalType(LogicalTypeId(type)));
-			}
-			pipeline.mat_lock.unlock();
-		}
-	}
-
-	chunk.Initialize(Allocator::DefaultAllocator(), types);
+	chunk.Initialize(Allocator::DefaultAllocator(), last_op.GetTypes());
 }
 
 void PipelineExecutor::StartOperator(PhysicalOperator &op) {
@@ -700,10 +530,10 @@ void PipelineExecutor::StartOperator(PhysicalOperator &op) {
 
 void PipelineExecutor::EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk) {
 	context.thread.profiler.EndOperator(chunk);
-	// TO DO: fix
-	//  if (chunk) {
-	//  	chunk->Verify();
-	//  }
+
+	if (chunk) {
+		chunk->Verify();
+	}
 }
 
 } // namespace duckdb

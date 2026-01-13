@@ -8,12 +8,12 @@
 
 #pragma once
 
-#include "duckdb/common/enums/stream_execution_result.hpp"
-#include "duckdb/common/queue.hpp"
 #include "duckdb/common/winapi.hpp"
-#include "duckdb/main/buffered_data/simple_buffered_data.hpp"
 #include "duckdb/main/query_result.hpp"
 #include "duckdb/parallel/interrupt.hpp"
+#include "duckdb/common/queue.hpp"
+#include "duckdb/common/enums/stream_execution_result.hpp"
+#include "duckdb/main/buffered_data/simple_buffered_data.hpp"
 
 namespace duckdb {
 
@@ -48,7 +48,6 @@ public:
 	DUCKDB_API unique_ptr<DataChunk> FetchRaw() override;
 	//! Converts the QueryResult to a string
 	DUCKDB_API string ToString() override;
-	int64_t GetRowNumber() override;
 	//! Materializes the query result and turns it into a materialized query result
 	DUCKDB_API unique_ptr<MaterializedQueryResult> Materialize();
 
