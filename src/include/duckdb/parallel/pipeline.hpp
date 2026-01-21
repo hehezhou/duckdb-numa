@@ -139,8 +139,12 @@ private:
 
 	//! The parent pipelines (i.e. pipelines that are dependent on this pipeline to finish)
 	vector<weak_ptr<Pipeline>> parents;
+
+public:
 	//! The dependencies of this pipeline
 	vector<weak_ptr<Pipeline>> dependencies;
+
+private:
 
 	vector<weak_ptr<Pipeline>> runtime_dependencies;
 

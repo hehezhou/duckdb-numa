@@ -2,6 +2,8 @@
 
 #include "duckdb/execution/executor.hpp"
 
+std::vector<std::pair<duckdb::Pipeline*, duckdb::Pipeline*>> equal_dependency_pairs;
+
 namespace duckdb {
 
 MetaPipeline::MetaPipeline(Executor &executor_p, PipelineBuildState &state_p, optional_ptr<PhysicalOperator> sink_p,
@@ -117,6 +119,7 @@ MetaPipeline &MetaPipeline::CreateConcurrentChildMetaPipeline(Pipeline &current,
 	// store the parent
 	child_meta_pipeline.parent = &current;
 	current.AddRuntimeDependency(child_meta_pipeline.GetBasePipeline());
+	equal_dependency_pairs.emplace_back(&current, child_meta_pipeline.GetBasePipeline().get());
 	// child meta pipeline is part of the recursive CTE too
 	child_meta_pipeline.recursive_cte = recursive_cte;
 	return child_meta_pipeline;

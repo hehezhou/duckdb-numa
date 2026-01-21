@@ -25,6 +25,25 @@
 
 double numa_test_start;
 
+static void InitParams() {
+    split_probe_rest = 1 << split_probe_rest_start;
+    // split_probe_rest = split_probe_rest_start;
+    swap_bitmask = swap_bitmask_start;
+    numa_test_start = GetNow();
+	equal_dependency_pairs.clear();
+}
+
+static void UpdateDependencies() {
+	for (idx_t i = equal_dependency_pairs.size(); i --> 0; ) {
+		auto a = equal_dependency_pairs[i].second;
+		auto b = equal_dependency_pairs[i].first;
+		for (auto j : b->dependencies) {
+			auto tmp = j.lock();
+			a->AddDependency(tmp);
+		}
+	}
+}
+
 namespace duckdb {
 
 Executor::Executor(ClientContext &context) : context(context), executor_tasks(0), blocked_thread_time(0) {
@@ -416,6 +435,7 @@ void Executor::InitializeInternal(PhysicalOperator &plan) {
 		auto root_pipeline = make_shared_ptr<MetaPipeline>(*this, state, nullptr);
 		InitParams();
 		root_pipeline->Build(*physical_plan);
+		UpdateDependencies();
 		profiler->Initialize(plan);
 		root_pipeline->Ready();
 
