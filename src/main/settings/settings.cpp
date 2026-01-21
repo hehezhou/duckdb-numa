@@ -17,6 +17,8 @@
 #include "duckdb/storage/buffer_manager.hpp"
 #include "duckdb/storage/storage_manager.hpp"
 
+#include "duckdb/common/numa_config.hpp"
+
 namespace duckdb {
 
 const string GetDefaultUserAgent() {
@@ -2051,6 +2053,36 @@ void HTTPLoggingOutputSetting::SetLocal(ClientContext &context, const Value &inp
 
 Value HTTPLoggingOutputSetting::GetSetting(const ClientContext &context) {
 	return Value(ClientConfig::GetConfig(context).http_logging_output);
+}
+
+//===--------------------------------------------------------------------===//
+// SplitPointSetting Setting
+//===--------------------------------------------------------------------===//
+void SplitPointSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+}
+
+void SplitPointSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter) {
+	auto new_val = parameter.GetValue<int64_t>();
+	split_probe_rest_start = new_val;
+}
+
+Value SplitPointSetting::GetSetting(const ClientContext &context) {
+	return Value(split_probe_rest_start);
+}
+
+//===--------------------------------------------------------------------===//
+// JoinSwap Setting
+//===--------------------------------------------------------------------===//
+void JoinSwapSetting::ResetGlobal(DatabaseInstance *db, DBConfig &config) {
+}
+
+void JoinSwapSetting::SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter) {
+	auto new_val = parameter.GetValue<int64_t>();
+	swap_bitmask_start = new_val;
+}
+
+Value JoinSwapSetting::GetSetting(const ClientContext &context) {
+	return Value(swap_bitmask_start);
 }
 
 } // namespace duckdb

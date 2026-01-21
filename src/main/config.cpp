@@ -157,6 +157,8 @@ static const ConfigurationOption internal_options[] = {
     DUCKDB_GLOBAL(IndexScanMaxCount),
     DUCKDB_LOCAL(EnableHTTPLoggingSetting),
     DUCKDB_LOCAL(HTTPLoggingOutputSetting),
+    DUCKDB_GLOBAL(SplitPointSetting),
+    DUCKDB_GLOBAL(JoinSwapSetting),
     FINAL_SETTING};
 
 vector<ConfigurationOption> DBConfig::GetOptions() {

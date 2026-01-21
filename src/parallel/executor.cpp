@@ -409,7 +409,6 @@ void Executor::InitializeInternal(PhysicalOperator &plan) {
 		physical_plan = &plan;
 
 		this->profiler = ClientData::Get(context).profiler;
-		profiler->Initialize(plan);
 		this->producer = scheduler.CreateProducer();
 
 		// build and ready the pipelines
@@ -417,6 +416,7 @@ void Executor::InitializeInternal(PhysicalOperator &plan) {
 		auto root_pipeline = make_shared_ptr<MetaPipeline>(*this, state, nullptr);
 		InitParams();
 		root_pipeline->Build(*physical_plan);
+		profiler->Initialize(plan);
 		root_pipeline->Ready();
 
 		// ready recursive cte pipelines too

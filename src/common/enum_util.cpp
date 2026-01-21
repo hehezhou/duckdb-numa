@@ -5502,6 +5502,8 @@ const char* EnumUtil::ToChars<PhysicalOperatorType>(PhysicalOperatorType value) 
 		return "UPDATE_EXTENSIONS";
 	case PhysicalOperatorType::CREATE_SECRET:
 		return "CREATE_SECRET";
+	case PhysicalOperatorType::PIPELINE_BREAKER:
+		return "PIPELINE_BREAKER";
 	default:
 		throw NotImplementedException(StringUtil::Format("Enum value: '%d' not implemented in ToChars<PhysicalOperatorType>", value));
 	}
@@ -5742,6 +5744,9 @@ PhysicalOperatorType EnumUtil::FromString<PhysicalOperatorType>(const char *valu
 	}
 	if (StringUtil::Equals(value, "CREATE_SECRET")) {
 		return PhysicalOperatorType::CREATE_SECRET;
+	}
+	if (StringUtil::Equals(value, "PIPELINE_BREAKER")) {
+		return PhysicalOperatorType::PIPELINE_BREAKER;
 	}
 	throw NotImplementedException(StringUtil::Format("Enum value: '%s' not implemented in FromString<PhysicalOperatorType>", value));
 }

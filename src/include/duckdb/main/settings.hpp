@@ -954,4 +954,22 @@ struct HTTPLoggingOutputSetting {
 	static Value GetSetting(const ClientContext &context);
 };
 
+struct SplitPointSetting {
+	static constexpr const char *Name = "split_point";
+	static constexpr const char *Description = "split point";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BIGINT;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
+struct JoinSwapSetting {
+	static constexpr const char *Name = "join_swap";
+	static constexpr const char *Description = "join swap";
+	static constexpr const LogicalTypeId InputType = LogicalTypeId::BIGINT;
+	static void SetGlobal(DatabaseInstance *db, DBConfig &config, const Value &parameter);
+	static void ResetGlobal(DatabaseInstance *db, DBConfig &config);
+	static Value GetSetting(const ClientContext &context);
+};
+
 } // namespace duckdb
