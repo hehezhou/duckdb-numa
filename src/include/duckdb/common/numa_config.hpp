@@ -17,7 +17,8 @@ static double GetNow() {
 }
 
 static void InitParams() {
-    split_probe_rest = split_probe_rest_start;
+    split_probe_rest = 1 << split_probe_rest_start;
+    // split_probe_rest = split_probe_rest_start;
     swap_bitmask = swap_bitmask_start;
     numa_test_start = GetNow();
 }
