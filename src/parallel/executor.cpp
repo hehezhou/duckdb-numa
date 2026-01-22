@@ -26,10 +26,10 @@
 double numa_test_start;
 
 static void InitParams() {
-    split_probe_rest = 1 << split_probe_rest_start;
-    // split_probe_rest = split_probe_rest_start;
-    swap_bitmask = swap_bitmask_start;
-    numa_test_start = GetNow();
+	split_probe_rest = 1 << split_probe_rest_start;
+	// split_probe_rest = split_probe_rest_start;
+	swap_bitmask = swap_bitmask_start;
+	numa_test_start = GetNow();
 	equal_dependency_pairs.clear();
 }
 
@@ -67,10 +67,10 @@ void Executor::AddEvent(shared_ptr<Event> event) {
 
 struct PipelineEventStack {
 	PipelineEventStack(Event &pipeline_initialize_event, Event &pipeline_event, Event &pipeline_prepare_finish_event,
-	                   Event &pipeline_finish_event, Event &pipeline_complete_event)
-	    : pipeline_initialize_event(pipeline_initialize_event), pipeline_event(pipeline_event),
-	      pipeline_prepare_finish_event(pipeline_prepare_finish_event), pipeline_finish_event(pipeline_finish_event),
-	      pipeline_complete_event(pipeline_complete_event) {
+					   Event &pipeline_finish_event, Event &pipeline_complete_event)
+		: pipeline_initialize_event(pipeline_initialize_event), pipeline_event(pipeline_event),
+		  pipeline_prepare_finish_event(pipeline_prepare_finish_event), pipeline_finish_event(pipeline_finish_event),
+		  pipeline_complete_event(pipeline_complete_event) {
 	}
 
 	Event &pipeline_initialize_event;
@@ -84,8 +84,8 @@ using event_map_t = reference_map_t<Pipeline, PipelineEventStack>;
 
 struct ScheduleEventData {
 	ScheduleEventData(const vector<shared_ptr<MetaPipeline>> &meta_pipelines, vector<shared_ptr<Event>> &events,
-	                  bool initial_schedule)
-	    : meta_pipelines(meta_pipelines), events(events), initial_schedule(initial_schedule) {
+					  bool initial_schedule)
+		: meta_pipelines(meta_pipelines), events(events), initial_schedule(initial_schedule) {
 	}
 
 	const vector<shared_ptr<MetaPipeline>> &meta_pipelines;
@@ -106,9 +106,9 @@ void Executor::SchedulePipeline(const shared_ptr<MetaPipeline> &meta_pipeline, S
 	auto base_prepare_finish_event = make_shared_ptr<PipelinePrepareFinishEvent>(base_pipeline);
 	auto base_finish_event = make_shared_ptr<PipelineFinishEvent>(base_pipeline);
 	auto base_complete_event =
-	    make_shared_ptr<PipelineCompleteEvent>(base_pipeline->executor, event_data.initial_schedule);
+		make_shared_ptr<PipelineCompleteEvent>(base_pipeline->executor, event_data.initial_schedule);
 	PipelineEventStack base_stack(*base_initialize_event, *base_event, *base_prepare_finish_event, *base_finish_event,
-	                              *base_complete_event);
+								  *base_complete_event);
 	events.push_back(std::move(base_initialize_event));
 	events.push_back(std::move(base_event));
 	events.push_back(std::move(base_prepare_finish_event));
@@ -138,8 +138,8 @@ void Executor::SchedulePipeline(const shared_ptr<MetaPipeline> &meta_pipeline, S
 			D_ASSERT(group_entry != event_map.end());
 			auto &group_stack = group_entry->second;
 			PipelineEventStack pipeline_stack(base_stack.pipeline_initialize_event, *pipeline_event,
-			                                  group_stack.pipeline_prepare_finish_event,
-			                                  group_stack.pipeline_finish_event, base_stack.pipeline_complete_event);
+											  group_stack.pipeline_prepare_finish_event,
+											  group_stack.pipeline_finish_event, base_stack.pipeline_complete_event);
 
 			// dependencies: base_finish -> pipeline_event -> group_prepare_finish
 			pipeline_stack.pipeline_event.AddDependency(base_stack.pipeline_finish_event);
@@ -152,8 +152,8 @@ void Executor::SchedulePipeline(const shared_ptr<MetaPipeline> &meta_pipeline, S
 			auto pipeline_prepare_finish_event = make_shared_ptr<PipelinePrepareFinishEvent>(pipeline);
 			auto pipeline_finish_event = make_shared_ptr<PipelineFinishEvent>(pipeline);
 			PipelineEventStack pipeline_stack(base_stack.pipeline_initialize_event, *pipeline_event,
-			                                  *pipeline_prepare_finish_event, *pipeline_finish_event,
-			                                  base_stack.pipeline_complete_event);
+											  *pipeline_prepare_finish_event, *pipeline_finish_event,
+											  base_stack.pipeline_complete_event);
 			events.push_back(std::move(pipeline_prepare_finish_event));
 			events.push_back(std::move(pipeline_finish_event));
 
@@ -169,8 +169,8 @@ void Executor::SchedulePipeline(const shared_ptr<MetaPipeline> &meta_pipeline, S
 		} else {
 			// no additional finish event
 			PipelineEventStack pipeline_stack(base_stack.pipeline_initialize_event, *pipeline_event,
-			                                  base_stack.pipeline_prepare_finish_event,
-			                                  base_stack.pipeline_finish_event, base_stack.pipeline_complete_event);
+											  base_stack.pipeline_prepare_finish_event,
+											  base_stack.pipeline_finish_event, base_stack.pipeline_complete_event);
 
 			// dependencies: base_initialize -> pipeline_event -> base_prepare_finish
 			pipeline_stack.pipeline_event.AddDependency(base_stack.pipeline_initialize_event);
@@ -286,7 +286,7 @@ void Executor::ScheduleEventsInternal(ScheduleEventData &event_data) {
 				child1_entry->second.pipeline_prepare_finish_event.AddDependency(child2_entry->second.pipeline_event);
 				// all children Finalize must wait until all PrepareFinalize
 				child1_entry->second.pipeline_finish_event.AddDependency(
-				    child2_entry->second.pipeline_prepare_finish_event);
+					child2_entry->second.pipeline_prepare_finish_event);
 			}
 		}
 	}
@@ -324,7 +324,7 @@ void Executor::VerifyScheduledEvents(const ScheduleEventData &event_data) {
 }
 
 void Executor::VerifyScheduledEventsInternal(const idx_t vertex, const vector<reference<Event>> &vertices,
-                                             vector<bool> &visited, vector<bool> &recursion_stack) {
+											 vector<bool> &visited, vector<bool> &recursion_stack) {
 	D_ASSERT(!recursion_stack[vertex]); // this vertex is in the recursion stack: circular dependency!
 	if (visited[vertex]) {
 		return; // early out: we already visited this vertex
@@ -367,7 +367,7 @@ void Executor::AddRecursiveCTE(PhysicalOperator &rec_cte) {
 }
 
 void Executor::ReschedulePipelines(const vector<shared_ptr<MetaPipeline>> &pipelines_p,
-                                   vector<shared_ptr<Event>> &events_p) {
+								   vector<shared_ptr<Event>> &events_p) {
 	ScheduleEventData event_data(pipelines_p, events_p, false);
 	ScheduleEventsInternal(event_data);
 }
@@ -723,7 +723,7 @@ void Executor::Flush(ThreadContext &thread_context) {
 }
 
 bool Executor::GetPipelinesProgress(double &current_progress, uint64_t &current_cardinality,
-                                    uint64_t &total_cardinality) { // LCOV_EXCL_START
+									uint64_t &total_cardinality) { // LCOV_EXCL_START
 	lock_guard<mutex> elock(executor_lock);
 
 	vector<double> progress;
@@ -749,8 +749,8 @@ bool Executor::GetPipelinesProgress(double &current_progress, uint64_t &current_
 	for (size_t i = 0; i < progress.size(); i++) {
 		progress[i] = MaxValue(0.0, MinValue(100.0, progress[i]));
 		current_cardinality = LossyNumericCast<idx_t>(static_cast<double>(
-		    static_cast<double>(current_cardinality) +
-		    static_cast<double>(progress[i]) * static_cast<double>(cardinality[i]) / static_cast<double>(100)));
+			static_cast<double>(current_cardinality) +
+			static_cast<double>(progress[i]) * static_cast<double>(cardinality[i]) / static_cast<double>(100)));
 		current_progress += progress[i] * double(cardinality[i]) / double(total_cardinality);
 		D_ASSERT(current_cardinality <= total_cardinality);
 	}
