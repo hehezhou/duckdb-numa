@@ -27,6 +27,7 @@ add_library_unity(
   plan_insert.cpp
   plan_limit.cpp
   plan_order.cpp
+  plan_pipeline_breaker.cpp
   plan_pivot.cpp
   plan_positional_join.cpp
   plan_pragma.cpp

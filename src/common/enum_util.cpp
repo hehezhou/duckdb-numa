@@ -3671,6 +3671,8 @@ const char* EnumUtil::ToChars<LogicalOperatorType>(LogicalOperatorType value) {
 		return "LOGICAL_ASOF_JOIN";
 	case LogicalOperatorType::LOGICAL_DEPENDENT_JOIN:
 		return "LOGICAL_DEPENDENT_JOIN";
+	case LogicalOperatorType::LOGICAL_PIPELINE_BREAKER:
+		return "LOGICAL_PIPELINE_BREAKER";
 	case LogicalOperatorType::LOGICAL_UNION:
 		return "LOGICAL_UNION";
 	case LogicalOperatorType::LOGICAL_EXCEPT:
@@ -3828,6 +3830,9 @@ LogicalOperatorType EnumUtil::FromString<LogicalOperatorType>(const char *value)
 	}
 	if (StringUtil::Equals(value, "LOGICAL_DEPENDENT_JOIN")) {
 		return LogicalOperatorType::LOGICAL_DEPENDENT_JOIN;
+	}
+	if (StringUtil::Equals(value, "LOGICAL_PIPELINE_BREAKER")) {
+		return LogicalOperatorType::LOGICAL_PIPELINE_BREAKER;
 	}
 	if (StringUtil::Equals(value, "LOGICAL_UNION")) {
 		return LogicalOperatorType::LOGICAL_UNION;
@@ -4437,6 +4442,8 @@ const char* EnumUtil::ToChars<MetricsType>(MetricsType value) {
 		return "OPTIMIZER_COLUMN_LIFETIME";
 	case MetricsType::OPTIMIZER_BUILD_SIDE_PROBE_SIDE:
 		return "OPTIMIZER_BUILD_SIDE_PROBE_SIDE";
+	case MetricsType::OPTIMIZER_PROBE_SIDE_PIPELINE_BREAKER:
+		return "OPTIMIZER_PROBE_SIDE_PIPELINE_BREAKER";
 	case MetricsType::OPTIMIZER_LIMIT_PUSHDOWN:
 		return "OPTIMIZER_LIMIT_PUSHDOWN";
 	case MetricsType::OPTIMIZER_TOP_N:
@@ -4561,6 +4568,9 @@ MetricsType EnumUtil::FromString<MetricsType>(const char *value) {
 	}
 	if (StringUtil::Equals(value, "OPTIMIZER_BUILD_SIDE_PROBE_SIDE")) {
 		return MetricsType::OPTIMIZER_BUILD_SIDE_PROBE_SIDE;
+	}
+	if (StringUtil::Equals(value, "OPTIMIZER_PROBE_SIDE_PIPELINE_BREAKER")) {
+		return MetricsType::OPTIMIZER_PROBE_SIDE_PIPELINE_BREAKER;
 	}
 	if (StringUtil::Equals(value, "OPTIMIZER_LIMIT_PUSHDOWN")) {
 		return MetricsType::OPTIMIZER_LIMIT_PUSHDOWN;
@@ -4865,6 +4875,8 @@ const char* EnumUtil::ToChars<OptimizerType>(OptimizerType value) {
 		return "COLUMN_LIFETIME";
 	case OptimizerType::BUILD_SIDE_PROBE_SIDE:
 		return "BUILD_SIDE_PROBE_SIDE";
+	case OptimizerType::PROBE_SIDE_PIPELINE_BREAKER:
+		return "PROBE_SIDE_PIPELINE_BREAKER";
 	case OptimizerType::LIMIT_PUSHDOWN:
 		return "LIMIT_PUSHDOWN";
 	case OptimizerType::TOP_N:
@@ -4935,6 +4947,9 @@ OptimizerType EnumUtil::FromString<OptimizerType>(const char *value) {
 	}
 	if (StringUtil::Equals(value, "BUILD_SIDE_PROBE_SIDE")) {
 		return OptimizerType::BUILD_SIDE_PROBE_SIDE;
+	}
+	if (StringUtil::Equals(value, "PROBE_SIDE_PIPELINE_BREAKER")) {
+		return OptimizerType::PROBE_SIDE_PIPELINE_BREAKER;
 	}
 	if (StringUtil::Equals(value, "LIMIT_PUSHDOWN")) {
 		return OptimizerType::LIMIT_PUSHDOWN;
@@ -5500,10 +5515,10 @@ const char* EnumUtil::ToChars<PhysicalOperatorType>(PhysicalOperatorType value) 
 		return "VERIFY_VECTOR";
 	case PhysicalOperatorType::UPDATE_EXTENSIONS:
 		return "UPDATE_EXTENSIONS";
-	case PhysicalOperatorType::CREATE_SECRET:
-		return "CREATE_SECRET";
 	case PhysicalOperatorType::PIPELINE_BREAKER:
 		return "PIPELINE_BREAKER";
+	case PhysicalOperatorType::CREATE_SECRET:
+		return "CREATE_SECRET";
 	default:
 		throw NotImplementedException(StringUtil::Format("Enum value: '%d' not implemented in ToChars<PhysicalOperatorType>", value));
 	}
@@ -5742,11 +5757,11 @@ PhysicalOperatorType EnumUtil::FromString<PhysicalOperatorType>(const char *valu
 	if (StringUtil::Equals(value, "UPDATE_EXTENSIONS")) {
 		return PhysicalOperatorType::UPDATE_EXTENSIONS;
 	}
-	if (StringUtil::Equals(value, "CREATE_SECRET")) {
-		return PhysicalOperatorType::CREATE_SECRET;
-	}
 	if (StringUtil::Equals(value, "PIPELINE_BREAKER")) {
 		return PhysicalOperatorType::PIPELINE_BREAKER;
+	}
+	if (StringUtil::Equals(value, "CREATE_SECRET")) {
+		return PhysicalOperatorType::CREATE_SECRET;
 	}
 	throw NotImplementedException(StringUtil::Format("Enum value: '%s' not implemented in FromString<PhysicalOperatorType>", value));
 }

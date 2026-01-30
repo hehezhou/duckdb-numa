@@ -10,6 +10,7 @@ add_library_unity(
   duckdb_optimizer
   OBJECT
   build_probe_side_optimizer.cpp
+  probe_side_pipeline_breaker_optimizer.cpp
   column_binding_replacer.cpp
   column_lifetime_analyzer.cpp
   common_aggregate_optimizer.cpp

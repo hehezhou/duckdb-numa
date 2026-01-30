@@ -136,6 +136,9 @@ unique_ptr<LogicalOperator> LogicalOperator::Deserialize(Deserializer &deseriali
 	case LogicalOperatorType::LOGICAL_ORDER_BY:
 		result = LogicalOrder::Deserialize(deserializer);
 		break;
+	case LogicalOperatorType::LOGICAL_PIPELINE_BREAKER:
+		result = LogicalPipelineBreaker::Deserialize(deserializer);
+		break;
 	case LogicalOperatorType::LOGICAL_PIVOT:
 		result = LogicalPivot::Deserialize(deserializer);
 		break;
@@ -553,6 +556,15 @@ unique_ptr<LogicalOperator> LogicalOrder::Deserialize(Deserializer &deserializer
 	auto orders = deserializer.ReadPropertyWithDefault<vector<BoundOrderByNode>>(200, "orders");
 	auto result = duckdb::unique_ptr<LogicalOrder>(new LogicalOrder(std::move(orders)));
 	deserializer.ReadPropertyWithDefault<vector<idx_t>>(201, "projections", result->projections);
+	return std::move(result);
+}
+
+void LogicalPipelineBreaker::Serialize(Serializer &serializer) const {
+	LogicalOperator::Serialize(serializer);
+}
+
+unique_ptr<LogicalOperator> LogicalPipelineBreaker::Deserialize(Deserializer &deserializer) {
+	auto result = duckdb::unique_ptr<LogicalPipelineBreaker>(new LogicalPipelineBreaker());
 	return std::move(result);
 }
 
