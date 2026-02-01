@@ -17,7 +17,7 @@ namespace duckdb {
 struct FileHandle;
 
 //! The standard row group size
-#define STANDARD_ROW_GROUPS_SIZE 16384
+#define STANDARD_ROW_GROUPS_SIZE 122880
 //! The definition of an invalid block
 #define INVALID_BLOCK (-1)
 //! The maximum block id is 2^62
