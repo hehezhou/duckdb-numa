@@ -76,4 +76,19 @@ DynamicTableFilterSet::GetFinalTableFilters(const PhysicalTableScan &scan,
 	return result;
 }
 
+unique_ptr<TableFilterSet> DynamicTableFilterSet::GetMergedFilters() const {
+	D_ASSERT(HasFilters());
+	lock_guard<mutex> l(lock);
+	auto result = make_uniq<TableFilterSet>();
+	for (auto &entry : filters) {
+		for (auto &filter : entry.second->filters) {
+			result->PushFilter(filter.first, filter.second->Copy());
+		}
+	}
+	if (result->filters.empty()) {
+		return nullptr;
+	}
+	return result;
+}
+
 } // namespace duckdb

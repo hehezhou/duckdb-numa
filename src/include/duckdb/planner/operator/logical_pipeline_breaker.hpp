@@ -11,6 +11,7 @@
 #pragma once
 
 #include "duckdb/planner/logical_operator.hpp"
+#include "duckdb/planner/table_filter.hpp"
 
 namespace duckdb {
 
@@ -24,6 +25,10 @@ public:
 
 public:
 	explicit LogicalPipelineBreaker(unique_ptr<LogicalOperator> child);
+
+	//! Contains a reference to dynamically generated filters (through e.g. a join up in the tree).
+	//! When reading from the materialized buffer, these filters are applied like a scan.
+	shared_ptr<DynamicTableFilterSet> dynamic_filters;
 
 public:
 	vector<ColumnBinding> GetColumnBindings() override;

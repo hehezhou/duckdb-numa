@@ -10,8 +10,10 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalPipelineBr
 	auto child = CreatePlan(*op.children[0]);
 	auto breaker_types = child->types;
 	auto breaker_estimated_cardinality = child->estimated_cardinality;
-	return make_uniq<PhysicalPipelineBreaker>(std::move(breaker_types), std::move(child),
-	                                          breaker_estimated_cardinality);
+	auto result = make_uniq<PhysicalPipelineBreaker>(std::move(breaker_types), std::move(child),
+	                                                  breaker_estimated_cardinality);
+	result->dynamic_filters = op.dynamic_filters;
+	return std::move(result);
 }
 
 } // namespace duckdb

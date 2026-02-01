@@ -34,6 +34,7 @@ static void InitParams() {
 }
 
 static void UpdateDependencies() {
+	return;
 	for (idx_t i = equal_dependency_pairs.size(); i --> 0; ) {
 		auto a = equal_dependency_pairs[i].second;
 		auto b = equal_dependency_pairs[i].first;

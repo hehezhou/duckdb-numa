@@ -1,6 +1,8 @@
 #include "duckdb/optimizer/join_filter_pushdown_optimizer.hpp"
+#include "duckdb/common/constants.hpp"
 #include "duckdb/planner/operator/logical_comparison_join.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/planner/operator/logical_pipeline_breaker.hpp"
 #include "duckdb/planner/operator/logical_projection.hpp"
 #include "duckdb/execution/operator/join/join_filter_pushdown.hpp"
 #include "duckdb/planner/expression/bound_columnref_expression.hpp"
@@ -64,9 +66,10 @@ void JoinFilterPushdownOptimizer::GenerateJoinFilters(LogicalComparisonJoin &joi
 		// could not generate any filters - bail-out
 		return;
 	}
-	// find the child LogicalGet (if possible)
+	// find the child LogicalGet or LogicalPipelineBreaker (if possible)
 	reference<LogicalOperator> probe_source(*join.children[0]);
-	while (probe_source.get().type != LogicalOperatorType::LOGICAL_GET) {
+	while (probe_source.get().type != LogicalOperatorType::LOGICAL_GET &&
+	       probe_source.get().type != LogicalOperatorType::LOGICAL_PIPELINE_BREAKER) {
 		auto &probe_child = probe_source.get();
 		switch (probe_child.type) {
 		case LogicalOperatorType::LOGICAL_LIMIT:
@@ -105,24 +108,52 @@ void JoinFilterPushdownOptimizer::GenerateJoinFilters(LogicalComparisonJoin &joi
 			return;
 		}
 	}
-	// found the LogicalGet
-	auto &get = probe_source.get().Cast<LogicalGet>();
-	if (!get.function.filter_pushdown) {
-		// filter pushdown is not supported - bail-out
-		return;
-	}
-	for (auto &filter : pushdown_info->filters) {
-		if (filter.probe_column_index.table_index != get.table_index) {
-			// the filter does not apply to the probe side here - bail-out
+	if (probe_source.get().type == LogicalOperatorType::LOGICAL_PIPELINE_BREAKER) {
+		// found LogicalPipelineBreaker - push to breaker and stop (no further pushdown)
+		// Breaker output can come from multiple sources (e.g. child join), so (table_index, column_index)
+		// does not equal output position. We must map each filter's binding to breaker output position.
+		auto &breaker = probe_source.get().Cast<LogicalPipelineBreaker>();
+		auto breaker_bindings = breaker.GetColumnBindings();
+		for (auto &filter : pushdown_info->filters) {
+			// Find output position of this column in the breaker
+			idx_t output_position = DConstants::INVALID_INDEX;
+			for (idx_t i = 0; i < breaker_bindings.size(); i++) {
+				if (breaker_bindings[i] == filter.probe_column_index) {
+					output_position = i;
+					break;
+				}
+			}
+			if (output_position == DConstants::INVALID_INDEX) {
+				// column not in breaker output - cannot push
+				return;
+			}
+			// Join pushes using column_index only; use output position so PhysicalPipelineBreaker
+			// applies filter to the correct chunk column (chunk column i = output position i).
+			filter.probe_column_index.column_index = output_position;
+		}
+		if (!breaker.dynamic_filters) {
+			breaker.dynamic_filters = make_shared_ptr<DynamicTableFilterSet>();
+		}
+		pushdown_info->dynamic_filters = breaker.dynamic_filters;
+	} else {
+		// found the LogicalGet
+		auto &get = probe_source.get().Cast<LogicalGet>();
+		if (!get.function.filter_pushdown) {
+			// filter pushdown is not supported - bail-out
 			return;
 		}
+		for (auto &filter : pushdown_info->filters) {
+			if (filter.probe_column_index.table_index != get.table_index) {
+				// the filter does not apply to the probe side here - bail-out
+				return;
+			}
+		}
+		// set up the dynamic filters (if we don't have any yet)
+		if (!get.dynamic_filters) {
+			get.dynamic_filters = make_shared_ptr<DynamicTableFilterSet>();
+		}
+		pushdown_info->dynamic_filters = get.dynamic_filters;
 	}
-	// pushdown can be performed
-	// set up the dynamic filters (if we don't have any yet)
-	if (!get.dynamic_filters) {
-		get.dynamic_filters = make_shared_ptr<DynamicTableFilterSet>();
-	}
-	pushdown_info->dynamic_filters = get.dynamic_filters;
 
 	// set up the min/max aggregates for each of the filters
 	vector<AggregateFunction> aggr_functions;
