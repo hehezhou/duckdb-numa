@@ -24,6 +24,7 @@
 #include <chrono>
 
 double numa_test_start;
+bool enable_smart_dependency = false;
 
 static void InitParams() {
 	split_probe_rest = 1 << split_probe_rest_start;
@@ -31,16 +32,54 @@ static void InitParams() {
 	swap_bitmask = swap_bitmask_start;
 	numa_test_start = GetNow();
 	equal_dependency_pairs.clear();
+	all_pipelines.clear();
+}
+
+static void DfsDependency(duckdb::Pipeline *current_pipeline, std::unordered_set<duckdb::Pipeline*> &important_pipelines) {
+	if (important_pipelines.find(current_pipeline) != important_pipelines.end()) {
+		return;
+	}
+	important_pipelines.insert(current_pipeline);
+	for (auto &next_pipeline : current_pipeline->dependencies) {
+		auto next_p = next_pipeline.lock();
+		if (next_p) {
+			DfsDependency(next_p.get(), important_pipelines);
+		}
+	}
 }
 
 static void UpdateDependencies() {
-	return;
+	if (!enable_smart_dependency) {
+		return;
+	}
+	std::unordered_set<duckdb::Pipeline*> important_pipelines;
 	for (idx_t i = equal_dependency_pairs.size(); i --> 0; ) {
 		auto a = equal_dependency_pairs[i].second;
-		auto b = equal_dependency_pairs[i].first;
-		for (auto j : b->dependencies) {
-			auto tmp = j.lock();
-			a->AddDependency(tmp);
+		auto &target_dependencies = equal_dependency_pairs[i].first->dependencies;
+		bool skip_tag = true;
+		for (idx_t x = 0; x < target_dependencies.size(); x++) {
+			auto target = target_dependencies[x].lock();
+			auto ce = target->GetOperators()[1].get().estimated_cardinality;
+			if (ce >= 5) {
+				continue;
+			}
+			skip_tag = false;
+			DfsDependency(target.get(), important_pipelines);
+		}
+		if (skip_tag) {
+			continue;
+		}
+		for (idx_t x = 0; x < target_dependencies.size(); x++) {
+			auto target = target_dependencies[x].lock();
+			auto ce = target->GetOperators()[1].get().estimated_cardinality;
+			if (ce >= 5) {
+				continue;
+			}
+			for (auto pipeline : all_pipelines) {
+				if (pipeline != equal_dependency_pairs[i].first && important_pipelines.find(pipeline) == important_pipelines.end()) {
+					pipeline->AddDependency(target);
+				}
+			}
 		}
 	}
 }
@@ -260,6 +299,7 @@ void Executor::ScheduleEventsInternal(ScheduleEventData &event_data) {
 	// 3. all join build child pipelines Finalize
 	// operators communicate their memory usage through the TemporaryMemoryManger (TMM) in PrepareFinalize
 	// then, when the child pipelines Finalize, all required memory is known, and TMM can make an informed decision
+	/*
 	for (auto &meta_pipeline : event_data.meta_pipelines) {
 		vector<shared_ptr<MetaPipeline>> children;
 		meta_pipeline->GetMetaPipelines(children, false, true);
@@ -291,6 +331,7 @@ void Executor::ScheduleEventsInternal(ScheduleEventData &event_data) {
 			}
 		}
 	}
+	*/
 
 	// verify that we have no cyclic dependencies
 	VerifyScheduledEvents(event_data);

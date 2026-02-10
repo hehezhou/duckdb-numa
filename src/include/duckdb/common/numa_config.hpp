@@ -21,3 +21,4 @@ extern int swap_bitmask;
 }
 
 extern std::vector<std::pair<duckdb::Pipeline*, duckdb::Pipeline*>> equal_dependency_pairs;
+extern std::vector<duckdb::Pipeline*> all_pipelines;

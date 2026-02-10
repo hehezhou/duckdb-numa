@@ -12,6 +12,8 @@
 #include "duckdb/execution/operator/join/physical_comparison_join.hpp"
 #include "duckdb/planner/expression/bound_aggregate_expression.hpp"
 
+bool filter_to_breaker = false;
+
 namespace duckdb {
 
 JoinFilterPushdownOptimizer::JoinFilterPushdownOptimizer(Optimizer &optimizer) : optimizer(optimizer) {
@@ -69,7 +71,7 @@ void JoinFilterPushdownOptimizer::GenerateJoinFilters(LogicalComparisonJoin &joi
 	// find the child LogicalGet or LogicalPipelineBreaker (if possible)
 	reference<LogicalOperator> probe_source(*join.children[0]);
 	while (probe_source.get().type != LogicalOperatorType::LOGICAL_GET &&
-	       probe_source.get().type != LogicalOperatorType::LOGICAL_PIPELINE_BREAKER) {
+	       (probe_source.get().type != LogicalOperatorType::LOGICAL_PIPELINE_BREAKER || !filter_to_breaker)) {
 		auto &probe_child = probe_source.get();
 		switch (probe_child.type) {
 		case LogicalOperatorType::LOGICAL_LIMIT:
@@ -79,6 +81,7 @@ void JoinFilterPushdownOptimizer::GenerateJoinFilters(LogicalComparisonJoin &joi
 		case LogicalOperatorType::LOGICAL_DISTINCT:
 		case LogicalOperatorType::LOGICAL_COMPARISON_JOIN:
 		case LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
+		case LogicalOperatorType::LOGICAL_PIPELINE_BREAKER:
 			// does not affect probe side - continue into left child
 			// FIXME: we can probably recurse into more operators here (e.g. window, set operation, unnest)
 			probe_source = *probe_child.children[0];

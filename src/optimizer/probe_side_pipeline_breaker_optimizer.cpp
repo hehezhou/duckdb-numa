@@ -16,10 +16,10 @@ ProbeSidePipelineBreakerOptimizer::ProbeSidePipelineBreakerOptimizer() {
 void ProbeSidePipelineBreakerOptimizer::VisitOperator(LogicalOperator &op) {
 	switch (op.type) {
 	case LogicalOperatorType::LOGICAL_COMPARISON_JOIN: {
+		VisitOperator(*op.children[1]);
 		if ((probe_breaker_bitmask >>= 1) & 1) {
 			op.children[0] = make_uniq<LogicalPipelineBreaker>(std::move(op.children[0]));
 		}
-		VisitOperator(*op.children[1]);
 		VisitOperator(*op.children[0]);
 		break;
 	}
