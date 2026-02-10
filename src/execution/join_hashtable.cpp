@@ -144,7 +144,7 @@ JoinHashTable::JoinHashTable(ClientContext &context, const vector<JoinCondition>
 }
 
 JoinHashTable::~JoinHashTable() {
-	numa_pool.free(entries, sizeof(ht_entry_t[capacity]), numa_id);
+	numa_pool.free(entries, sizeof(ht_entry_t) * capacity, numa_id);
 	entries = nullptr;
 }
 
@@ -726,7 +726,7 @@ void JoinHashTable::AllocatePointerTable(int numa_id) {
 		// hash_map = buffer_manager.GetBufferAllocator().Allocate(capacity * sizeof(ht_entry_t));
 		// entries = reinterpret_cast<ht_entry_t *>(hash_map.get());
 		// entries = (ht_entry_t*)numa_alloc_onnode(sizeof(ht_entry_t[capacity]), numa_id);
-		entries = (ht_entry_t*)numa_pool.allocate(sizeof(ht_entry_t[capacity]), numa_id);
+		entries = (ht_entry_t*)numa_pool.allocate(sizeof(ht_entry_t) * capacity, numa_id);
 		this->numa_id = numa_id;
 	}
 	D_ASSERT(hash_map.GetSize() == capacity * sizeof(ht_entry_t));
@@ -1460,7 +1460,7 @@ void JoinHashTable::Reset() {
 	hash_map.Reset();
 	finalized = false;
 	// numa_free(entries, sizeof(ht_entry_t[capacity]));
-	numa_pool.free(entries, sizeof(ht_entry_t[capacity]), numa_id);
+	numa_pool.free(entries, sizeof(ht_entry_t) * capacity, numa_id);
 	entries = nullptr;
 }
 

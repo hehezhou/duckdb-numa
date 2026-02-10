@@ -20,7 +20,7 @@ static constexpr const duckdb::idx_t LOCAL_AT_LEAST = 10;
 extern int swap_bitmask_start;
 extern int swap_bitmask;
 
-static void InitParams() {
+[[maybe_unused]] static void InitParams() {
     split_probe_rest = split_probe_rest_start;
     swap_bitmask = swap_bitmask_start;
     numa_test_start = GetNow();

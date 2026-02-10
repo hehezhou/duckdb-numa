@@ -144,6 +144,9 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 		executor_ptr = new PipelineExecutor(pipeline.GetClientContext(), pipeline);
 	}
 
+	auto &pipeline_event = dynamic_cast<PipelineEvent&>(*this->event);
+	pipeline_event.Start();
+
 	bool finish_tag = false;
 	switch (mode) {
 	case TaskNUMAExecutionMode::PROCESS_LOCAL: {
@@ -334,7 +337,7 @@ void Pipeline::Schedule(shared_ptr<Event> &event) {
 
 bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
 	// split the scan up into parts and schedule the parts
-	if (max_threads <= 10) {
+	if (max_threads <= 1) {
 		// too small to parallelize
 		return false;
 	}
