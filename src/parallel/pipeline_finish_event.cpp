@@ -61,7 +61,11 @@ PipelineFinishEvent::PipelineFinishEvent(shared_ptr<Pipeline> pipeline_p) : Base
 void PipelineFinishEvent::Schedule() {
 	vector<shared_ptr<Task>> tasks;
 	tasks.push_back(make_uniq<PipelineFinishTask>(*pipeline, shared_from_this()));
-	SetTasks(std::move(tasks));
+	// SetTasks(std::move(tasks));
+	auto result = tasks[0]->Execute(TaskExecutionMode::PROCESS_ALL);
+	if (result != TaskExecutionResult::TASK_FINISHED) {
+		throw InternalException("unsupported result");
+	}
 }
 
 void PipelineFinishEvent::FinishEvent() {

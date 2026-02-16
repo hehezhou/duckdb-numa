@@ -40,6 +40,7 @@ class LogicalInsert;
 class LogicalJoin;
 class LogicalLimit;
 class LogicalOrder;
+class LogicalPipelineBreaker;
 class LogicalPivot;
 class LogicalPositionalJoin;
 class LogicalPragma;

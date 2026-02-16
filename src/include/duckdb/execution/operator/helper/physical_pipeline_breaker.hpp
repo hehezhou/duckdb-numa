@@ -11,6 +11,7 @@
 #include <iostream>
 
 #include "duckdb/execution/physical_operator.hpp"
+#include "duckdb/planner/table_filter.hpp"
 
 #include "concurrentqueue.h"
 #include "duckdb/common/thread.hpp"
@@ -83,6 +84,9 @@ public:
 
 public:
 	void BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) override;
+
+	//! Dynamic filters pushed from joins above (same as scan). Applied when reading from buffer.
+	shared_ptr<DynamicTableFilterSet> dynamic_filters;
 
 private:
 	unique_ptr<BreakerConcurrentQueue> chunk_queue;

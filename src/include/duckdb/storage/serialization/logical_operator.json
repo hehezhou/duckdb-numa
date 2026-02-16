@@ -446,6 +446,13 @@
     ]
   },
   {
+    "class": "LogicalPipelineBreaker",
+    "base": "LogicalOperator",
+    "enum": "LOGICAL_PIPELINE_BREAKER",
+    "members": [
+    ]
+  },
+  {
     "class": "LogicalPositionalJoin",
     "base": "LogicalOperator",
     "enum": "LOGICAL_POSITIONAL_JOIN",

@@ -83,6 +83,7 @@ public:
 	ClientContext &GetClientContext();
 
 	void AddDependency(shared_ptr<Pipeline> &pipeline);
+	void AddRuntimeDependency(shared_ptr<Pipeline> &pipeline);
 
 	void Ready();
 	void Reset();
@@ -138,8 +139,14 @@ private:
 
 	//! The parent pipelines (i.e. pipelines that are dependent on this pipeline to finish)
 	vector<weak_ptr<Pipeline>> parents;
+
+public:
 	//! The dependencies of this pipeline
 	vector<weak_ptr<Pipeline>> dependencies;
+
+private:
+
+	vector<weak_ptr<Pipeline>> runtime_dependencies;
 
 	//! The base batch index of this pipeline
 	idx_t base_batch_index = 0;

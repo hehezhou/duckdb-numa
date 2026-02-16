@@ -1,22 +1,25 @@
 #pragma once
 
 #include "duckdb/common/typedefs.hpp"
-
 #include "sys/time.h"
+#include <vector>
+
+namespace duckdb {
+class Pipeline;
+}
 
 extern int current_join_id;
-extern idx_t split_probe_bitmask;
+extern int split_probe_rest_start;
 extern double numa_test_start;
+extern int swap_bitmask_start;
+extern int swap_bitmask;
 extern int next_numa_id;
 
-static double GetNow() {
+[[maybe_unused]] static double GetNow() {
 	struct timeval tv;
 	gettimeofday(&tv, nullptr);
 	return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
 }
 
-static void InitParams() {
-	current_join_id = 0;
-	next_numa_id = 0;
-    numa_test_start = GetNow();
-}
+extern std::vector<std::pair<duckdb::Pipeline*, duckdb::Pipeline*>> equal_dependency_pairs;
+extern std::vector<duckdb::Pipeline*> all_pipelines;

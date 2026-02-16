@@ -72,6 +72,7 @@ protected:
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalLimit &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalOrder &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalTopN &op);
+	unique_ptr<PhysicalOperator> CreatePlan(LogicalPipelineBreaker &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalPositionalJoin &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalProjection &op);
 	unique_ptr<PhysicalOperator> CreatePlan(LogicalInsert &op);

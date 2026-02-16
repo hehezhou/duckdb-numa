@@ -26,6 +26,7 @@ add_library_unity(
   logical_join.cpp
   logical_limit.cpp
   logical_order.cpp
+  logical_pipeline_breaker.cpp
   logical_pivot.cpp
   logical_positional_join.cpp
   logical_pragma.cpp

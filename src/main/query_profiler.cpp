@@ -385,7 +385,6 @@ void QueryProfiler::Flush(OperatorProfiler &profiler) {
 	if (!IsEnabled() || !running) {
 		return;
 	}
-	return;
 	for (auto &node : profiler.timings) {
 		auto &op = node.first.get();
 		auto entry = tree_map.find(op);

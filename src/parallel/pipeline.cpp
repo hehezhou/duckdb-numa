@@ -36,6 +36,9 @@ TaskExecutionResult PipelineTask::ExecuteTask(TaskExecutionMode mode) {
 		pipeline_executor = make_uniq<PipelineExecutor>(pipeline.GetClientContext(), pipeline);
 	}
 
+	auto &pipeline_event = dynamic_cast<PipelineEvent&>(*this->event);
+	pipeline_event.Start();
+
 	pipeline_executor->SetTaskForInterrupts(shared_from_this());
 
 	if (mode == TaskExecutionMode::PROCESS_PARTIAL) {
@@ -251,6 +254,11 @@ void Pipeline::AddDependency(shared_ptr<Pipeline> &pipeline) {
 	D_ASSERT(pipeline);
 	dependencies.push_back(weak_ptr<Pipeline>(pipeline));
 	pipeline->parents.push_back(weak_ptr<Pipeline>(shared_from_this()));
+}
+
+void Pipeline::AddRuntimeDependency(shared_ptr<Pipeline> &pipeline) {
+	D_ASSERT(pipeline);
+	runtime_dependencies.push_back(weak_ptr<Pipeline>(pipeline));
 }
 
 string Pipeline::ToString() const {

@@ -29,6 +29,7 @@ static const DefaultOptimizerType internal_optimizer_types[] = {
     {"limit_pushdown", OptimizerType::LIMIT_PUSHDOWN},
     {"top_n", OptimizerType::TOP_N},
     {"build_side_probe_side", OptimizerType::BUILD_SIDE_PROBE_SIDE},
+    {"probe_side_pipeline_breaker", OptimizerType::PROBE_SIDE_PIPELINE_BREAKER},
     {"compressed_materialization", OptimizerType::COMPRESSED_MATERIALIZATION},
     {"duplicate_groups", OptimizerType::DUPLICATE_GROUPS},
     {"reorder_filter", OptimizerType::REORDER_FILTER},
