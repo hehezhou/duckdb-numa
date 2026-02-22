@@ -421,7 +421,7 @@ OperatorResultType PipelineExecutor::Execute(DataChunk &input, DataChunk &result
 			// operator
 			StartOperator(current_operator);
 			auto result = current_operator.Execute(context, prev_chunk, current_chunk, *current_operator.op_state,
-			                                          *intermediate_states[current_intermediate - 1]);
+			                                       *intermediate_states[current_intermediate - 1]);
 			EndOperator(current_operator, &current_chunk);
 			if (result == OperatorResultType::HAVE_MORE_OUTPUT) {
 				// more data remains in this operator

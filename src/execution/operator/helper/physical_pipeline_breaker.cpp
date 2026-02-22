@@ -2,6 +2,9 @@
 
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
+#include "duckdb/execution/expression_executor.hpp"
+#include "duckdb/planner/expression/bound_reference_expression.hpp"
+#include "duckdb/planner/expression/bound_conjunction_expression.hpp"
 
 #include "duckdb/common/types/column/column_data_collection.hpp"
 #include "duckdb/common/types/column/column_data_collection_segment.hpp"
@@ -121,36 +124,78 @@ SinkFinalizeType PhysicalPipelineBreaker::Finalize(Pipeline &pipeline, Event &ev
 // Source
 //===--------------------------------------------------------------------===//
 class PipelineBreakerGlobalSource : public GlobalSourceState {
+public:
 	idx_t MaxThreads() override {
 		return 96;
 	}
+	//! Filter expression built from dynamic_filters (join filter pushdown), applied when reading chunks
+	unique_ptr<Expression> filter_expression;
 };
 
 unique_ptr<GlobalSourceState> PhysicalPipelineBreaker::GetGlobalSourceState(ClientContext &context) const {
-	return make_uniq<PipelineBreakerGlobalSource>();
+	auto gstate = make_uniq<PipelineBreakerGlobalSource>();
+	if (dynamic_filters && dynamic_filters->HasFilters()) {
+		auto table_filters = dynamic_filters->GetMergedFilters();
+		vector<unique_ptr<Expression>> exprs;
+		for (auto &entry : table_filters->filters) {
+			// entry.first is the output position (set by optimizer when pushing to breaker)
+			auto col_idx = entry.first;
+			auto &filter = entry.second;
+			auto col_expr = make_uniq<BoundReferenceExpression>(types[col_idx], col_idx);
+			exprs.push_back(filter->ToExpression(*col_expr));
+		}
+		if (exprs.size() == 1) {
+			gstate->filter_expression = std::move(exprs[0]);
+		} else {
+			auto conjunction = make_uniq<BoundConjunctionExpression>(ExpressionType::CONJUNCTION_AND);
+			for (auto &e : exprs) {
+				conjunction->children.push_back(std::move(e));
+			}
+			gstate->filter_expression = std::move(conjunction);
+		}
+	}
+	return std::move(gstate);
 }
 
 class PipelineBreakerLocalSource : public LocalSourceState {
 public:
-	PipelineBreakerLocalSource() {
+	PipelineBreakerLocalSource(ExecutionContext &context, optional_ptr<Expression> filter_expression) {
 		scan_state.properties = ColumnDataScanProperties::ALLOW_ZERO_COPY;
+		if (filter_expression) {
+			filter_executor = make_uniq<ExpressionExecutor>(context.client, *filter_expression);
+			sel.Initialize(STANDARD_VECTOR_SIZE);
+		}
 	}
+
 public:
 	ChunkManagementState scan_state;
 	BreakerChunkReference chunk_ref;
+	unique_ptr<ExpressionExecutor> filter_executor;
+	SelectionVector sel;
 };
 
 unique_ptr<LocalSourceState> PhysicalPipelineBreaker::GetLocalSourceState(ExecutionContext &context,
 																		  GlobalSourceState &gstate) const {
-	return make_uniq<PipelineBreakerLocalSource>();
+	auto &g = gstate.Cast<PipelineBreakerGlobalSource>();
+	return make_uniq<PipelineBreakerLocalSource>(context, g.filter_expression.get());
 }
 
 SourceResultType PhysicalPipelineBreaker::GetData(ExecutionContext &context, DataChunk &chunk,
                                                   OperatorSourceInput &input) const {
 	auto &lstate = input.local_state.Cast<PipelineBreakerLocalSource>();
 	auto &chunk_ref = lstate.chunk_ref;
-	if (chunk_queue->TryDequeue(chunk_ref)) {
+	while (chunk_queue->TryDequeue(chunk_ref)) {
 		chunk_ref.buffer->Scan(chunk_ref.chunk_meta, chunk, lstate.scan_state);
+		if (lstate.filter_executor) {
+			idx_t result_count = lstate.filter_executor->SelectExpression(chunk, lstate.sel);
+			if (result_count == 0) {
+				// all rows filtered out - try next chunk
+				continue;
+			}
+			if (result_count < chunk.size()) {
+				chunk.Slice(chunk, lstate.sel, result_count);
+			}
+		}
 		return SourceResultType::HAVE_MORE_OUTPUT;
 	}
 	return SourceResultType::FINISHED;
@@ -171,7 +216,7 @@ void PhysicalPipelineBreaker::BuildPipelines(Pipeline &current, MetaPipeline &me
 
 	// we create a new pipeline starting from the child
 	auto &child_meta_pipeline = meta_pipeline.CreateConcurrentChildMetaPipeline(current, *this);
-	child_meta_pipeline.GetBasePipeline()->numa_id = 1;
+	child_meta_pipeline.GetBasePipeline()->numa_id = current.numa_id ^ 1;
 	child_meta_pipeline.Build(*children[0]);
 }
 

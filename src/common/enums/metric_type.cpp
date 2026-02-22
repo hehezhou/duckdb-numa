@@ -28,6 +28,7 @@ profiler_settings_t MetricsUtils::GetOptimizerMetrics() {
         MetricsType::OPTIMIZER_COMMON_AGGREGATE,
         MetricsType::OPTIMIZER_COLUMN_LIFETIME,
         MetricsType::OPTIMIZER_BUILD_SIDE_PROBE_SIDE,
+        MetricsType::OPTIMIZER_PROBE_SIDE_PIPELINE_BREAKER,
         MetricsType::OPTIMIZER_LIMIT_PUSHDOWN,
         MetricsType::OPTIMIZER_TOP_N,
         MetricsType::OPTIMIZER_COMPRESSED_MATERIALIZATION,
@@ -84,6 +85,8 @@ MetricsType MetricsUtils::GetOptimizerMetricByType(OptimizerType type) {
             return MetricsType::OPTIMIZER_COLUMN_LIFETIME;
         case OptimizerType::BUILD_SIDE_PROBE_SIDE:
             return MetricsType::OPTIMIZER_BUILD_SIDE_PROBE_SIDE;
+        case OptimizerType::PROBE_SIDE_PIPELINE_BREAKER:
+            return MetricsType::OPTIMIZER_PROBE_SIDE_PIPELINE_BREAKER;
         case OptimizerType::LIMIT_PUSHDOWN:
             return MetricsType::OPTIMIZER_LIMIT_PUSHDOWN;
         case OptimizerType::TOP_N:
@@ -137,6 +140,8 @@ OptimizerType MetricsUtils::GetOptimizerTypeByMetric(MetricsType type) {
             return OptimizerType::COLUMN_LIFETIME;
         case MetricsType::OPTIMIZER_BUILD_SIDE_PROBE_SIDE:
             return OptimizerType::BUILD_SIDE_PROBE_SIDE;
+        case MetricsType::OPTIMIZER_PROBE_SIDE_PIPELINE_BREAKER:
+            return OptimizerType::PROBE_SIDE_PIPELINE_BREAKER;
         case MetricsType::OPTIMIZER_LIMIT_PUSHDOWN:
             return OptimizerType::LIMIT_PUSHDOWN;
         case MetricsType::OPTIMIZER_TOP_N:
@@ -175,6 +180,7 @@ bool MetricsUtils::IsOptimizerMetric(MetricsType type) {
         case MetricsType::OPTIMIZER_COMMON_AGGREGATE:
         case MetricsType::OPTIMIZER_COLUMN_LIFETIME:
         case MetricsType::OPTIMIZER_BUILD_SIDE_PROBE_SIDE:
+        case MetricsType::OPTIMIZER_PROBE_SIDE_PIPELINE_BREAKER:
         case MetricsType::OPTIMIZER_LIMIT_PUSHDOWN:
         case MetricsType::OPTIMIZER_TOP_N:
         case MetricsType::OPTIMIZER_COMPRESSED_MATERIALIZATION:

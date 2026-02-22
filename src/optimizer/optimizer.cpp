@@ -5,6 +5,7 @@
 #include "duckdb/main/config.hpp"
 #include "duckdb/main/query_profiler.hpp"
 #include "duckdb/optimizer/build_probe_side_optimizer.hpp"
+#include "duckdb/optimizer/probe_side_pipeline_breaker_optimizer.hpp"
 #include "duckdb/optimizer/column_lifetime_analyzer.hpp"
 #include "duckdb/optimizer/common_aggregate_optimizer.hpp"
 #include "duckdb/optimizer/cse_optimizer.hpp"
@@ -219,6 +220,11 @@ void Optimizer::RunBuiltInOptimizers() {
 	RunOptimizer(OptimizerType::REORDER_FILTER, [&]() {
 		ExpressionHeuristics expression_heuristics(*this);
 		plan = expression_heuristics.Rewrite(std::move(plan));
+	});
+
+	RunOptimizer(OptimizerType::PROBE_SIDE_PIPELINE_BREAKER, [&]() {
+		ProbeSidePipelineBreakerOptimizer probe_side_breaker_optimizer;
+		probe_side_breaker_optimizer.VisitOperator(*plan);
 	});
 
 	// perform join filter pushdown after the dust has settled

@@ -119,6 +119,9 @@ unique_ptr<PhysicalOperator> PhysicalPlanGenerator::CreatePlan(LogicalOperator &
 	case LogicalOperatorType::LOGICAL_CROSS_PRODUCT:
 		plan = CreatePlan(op.Cast<LogicalCrossProduct>());
 		break;
+	case LogicalOperatorType::LOGICAL_PIPELINE_BREAKER:
+		plan = CreatePlan(op.Cast<LogicalPipelineBreaker>());
+		break;
 	case LogicalOperatorType::LOGICAL_POSITIONAL_JOIN:
 		plan = CreatePlan(op.Cast<LogicalPositionalJoin>());
 		break;

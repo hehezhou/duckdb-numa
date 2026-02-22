@@ -357,7 +357,8 @@ bool Pipeline::LaunchScanTasks(shared_ptr<Event> &event, idx_t max_threads) {
 		if (dynamic_cast<PhysicalPipelineBreaker*>(sink.get()) != nullptr) {
 			is_final_task = true;
 		}
-		event->SetTaskNUMA(new PipelineTaskNUMA(*this, event, numa_id, is_final_task, max_threads));
+		event->SetTaskNUMA(new PipelineTaskNUMA(*this, event, numa_id, is_final_task,
+			STANDARD_ROW_GROUPS_SIZE / STANDARD_VECTOR_SIZE * max_threads));
 	}
 	return true;
 }

@@ -247,7 +247,7 @@ static inline void GetRowPointersInternal(DataChunk &keys, TupleDataChunkState &
 	match_count = 0;
 
 	while (remaining_count > 0) {
-				idx_t salt_match_count = 0;
+		idx_t salt_match_count = 0;
 		idx_t key_no_match_count = 0;
 
 		// for each entry, linear probing until
@@ -794,6 +794,25 @@ void JoinHashTable::Probe(ScanStructure &scan_structure, DataChunk &keys, TupleD
 		Vector hashes(LogicalType::HASH);
 		// hash all the keys
 		Hash(keys, *current_sel, scan_structure.count, hashes);
+
+		// {
+		// 	auto cpu_id = sched_getcpu();
+		// 	std::string output = "cpu " + std::to_string(cpu_id);
+		// 	int status;
+		// 	void *pages = keys.data[0].GetData();
+		// 	long ret = syscall(SYS_move_pages, 0, 1, &pages, NULL, &status, 0);
+		// 	if (ret < 0) {
+		// 		perror("move_pages");
+		// 	}
+		// 	output += " keys " + std::to_string(status) + " " + std::to_string(reinterpret_cast<uint64_t&>(pages));
+		// 	pages = hashes.GetData();
+		// 	ret = syscall(SYS_move_pages, 0, 1, &pages, NULL, &status, 0);
+		// 	if (ret < 0) {
+		// 		perror("move_pages");
+		// 	}
+		// 	output += " hashes " + std::to_string(status) + " " + std::to_string(reinterpret_cast<uint64_t&>(pages));
+		// 	fprintf(stderr, "%s\n", output.c_str());
+		// }
 
 		// now initialize the pointers of the scan structure based on the hashes
 		GetRowPointers(keys, key_state, probe_state, hashes, *current_sel, scan_structure.count,

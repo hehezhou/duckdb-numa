@@ -2,6 +2,9 @@
 
 #include "duckdb/execution/executor.hpp"
 
+std::vector<std::pair<duckdb::Pipeline*, duckdb::Pipeline*>> equal_dependency_pairs;
+std::vector<duckdb::Pipeline*> all_pipelines;
+
 namespace duckdb {
 
 MetaPipeline::MetaPipeline(Executor &executor_p, PipelineBuildState &state_p, optional_ptr<PhysicalOperator> sink_p,
@@ -104,6 +107,7 @@ MetaPipeline &MetaPipeline::CreateChildMetaPipeline(Pipeline &current, PhysicalO
 	child_meta_pipeline.parent = &current;
 	// child MetaPipeline must finish completely before this MetaPipeline can start
 	current.AddDependency(child_meta_pipeline.GetBasePipeline());
+	all_pipelines.emplace_back(child_meta_pipeline.GetBasePipeline().get());
 	child_meta_pipeline.GetBasePipeline()->numa_id = current.numa_id;
 	// child meta pipeline is part of the recursive CTE too
 	child_meta_pipeline.recursive_cte = recursive_cte;
@@ -117,6 +121,8 @@ MetaPipeline &MetaPipeline::CreateConcurrentChildMetaPipeline(Pipeline &current,
 	// store the parent
 	child_meta_pipeline.parent = &current;
 	current.AddRuntimeDependency(child_meta_pipeline.GetBasePipeline());
+	equal_dependency_pairs.emplace_back(&current, child_meta_pipeline.GetBasePipeline().get());
+	all_pipelines.emplace_back(child_meta_pipeline.GetBasePipeline().get());
 	// child meta pipeline is part of the recursive CTE too
 	child_meta_pipeline.recursive_cte = recursive_cte;
 	return child_meta_pipeline;

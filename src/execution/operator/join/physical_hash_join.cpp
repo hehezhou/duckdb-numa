@@ -25,6 +25,11 @@
 
 #include "duckdb/common/numa_config.hpp"
 
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <linux/mempolicy.h>
+#include <string.h>
+#include <errno.h>
 namespace duckdb {
 
 PhysicalHashJoin::PhysicalHashJoin(LogicalOperator &op, unique_ptr<PhysicalOperator> left,
@@ -507,7 +512,48 @@ public:
 		vector<std::tuple<idx_t, idx_t>> finalize_tasks;
 		auto &ht = *sink.hash_table;
 		const auto chunk_count = ht.GetDataCollection().ChunkCount();
-		// const auto num_threads = NumericCast<idx_t>(sink.num_threads);
+
+		// auto entries = ht.entries;
+		// auto entry_count = ht.capacity;
+		// std::map<int, idx_t> qwq;
+		// for (idx_t i = 0; i < entry_count; i += 512) {
+		// 	void *pages;
+		// 	int status;
+		// 	pages = entries + i;
+		// 	long ret = syscall(SYS_move_pages, 0, 1, &pages, NULL, &status, 0);
+		// 	if (ret < 0) {
+		// 		perror("move_pages");
+		// 	}
+		// 	qwq[status]++;
+		// }
+		// Printer::PrintF("HT on node %d:", pipeline->numa_id);
+		// for (auto [i, j] : qwq) {
+		// 	Printer::PrintF("%d %llu", i, j);
+		// }
+
+		// TupleDataChunkIterator iterator(ht.GetDataCollection(), TupleDataPinProperties::KEEP_EVERYTHING_PINNED, 0,
+		// 								chunk_count, false);
+		// const auto row_locations = iterator.GetRowLocations();
+		// std::map<int, idx_t> qwq;
+		// do {
+		// 	const auto count = iterator.GetCurrentChunkCount();
+		// 	for (int i = 0; i < count; i += 512) {
+		// 		int status;
+		// 		long ret = syscall(SYS_move_pages, 0, 1, row_locations + i, NULL, &status, 0);
+		// 		if (ret < 0) {
+		// 			perror("move_pages");
+		// 		}
+		// 		qwq[status]++;
+		// 	}
+		// 	if (count >= 3 && row_locations[2] - row_locations[1] != row_locations[1] - row_locations[0]) {
+		// 		Printer::Print("...");
+		// 	}
+		// } while (iterator.Next());
+		// Printer::PrintF("HT on node %d:", pipeline->numa_id);
+		// for (auto [i, j] : qwq) {
+		// 	Printer::PrintF("%d %llu", i, j);
+		// }
+
 		auto num_threads = NumericCast<idx_t>(sink.num_threads);
 		if (num_threads == 1 || (ht.Count() < PARALLEL_CONSTRUCT_THRESHOLD && !context.config.verify_parallelism)) {
 			// Single-threaded finalize

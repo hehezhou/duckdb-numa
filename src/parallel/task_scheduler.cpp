@@ -76,6 +76,8 @@ bool TaskScheduler::GetTaskFromProducer(ProducerToken &token, shared_ptr<Task> &
 	return queue->DequeueFromProducer(token, task);
 }
 
+class HashJoinFinalizeTask;
+
 void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 #ifndef DUCKDB_NO_THREADS
 	static constexpr const int64_t INITIAL_FLUSH_WAIT = 500000; // initial wait time of 0.5s (in mus) before flushing
@@ -96,6 +98,10 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 		// }
 		if (execute_type == DequeueResult::TASK_NORMAL) {
 			auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
+			// if (typeid(*task) == typeid(PipelineTask) || strcmp(typeid(*task).name(), "N6duckdb20HashJoinFinalizeTaskE") == 0) {
+			// 	auto &ptask = dynamic_cast<ExecutorTask&>(*task);
+			// 	fprintf(stderr, "end %lld %d %f\n", reinterpret_cast<const uint64_t>(ptask.event.get()), cpu_id,  GetNow() - numa_test_start);
+			// }
 
 			switch (execute_result) {
 			case TaskExecutionResult::TASK_FINISHED:

@@ -1,15 +1,12 @@
 #include "duckdb/execution/operator/join/physical_join.hpp"
 
 #include "duckdb/execution/operator/join/physical_hash_join.hpp"
-#include "duckdb/execution/operator/helper/physical_pipeline_breaker.hpp"
 #include "duckdb/parallel/meta_pipeline.hpp"
 #include "duckdb/parallel/pipeline.hpp"
 
-#include "duckdb/common/numa_config.hpp"
-
-// NUMACONSTANT
+// NUMACONSTANT - defined here, declared in numa_config.hpp
 int split_probe_rest;
-int split_probe_rest_start = 4;
+int split_probe_rest_start = 2;
 
 namespace duckdb {
 
@@ -40,7 +37,6 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 	op.op_state.reset();
 	op.sink_state.reset();
 
-	Printer::Print("start");
 	// 'current' is the probe pipeline: add this operator
 	auto &state = meta_pipeline.GetState();
 	state.AddPipelineOperator(current, op);
@@ -54,15 +50,6 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 		// on the RHS (build side), we construct a child MetaPipeline with this operator as its sink
 		auto &child_meta_pipeline = meta_pipeline.CreateChildMetaPipeline(current, op, MetaPipelineType::JOIN_BUILD);
 		child_meta_pipeline.Build(*op.children[1]);
-	}
-
-	// NUMATODO: config
-	if (--split_probe_rest == 0) {
-		Printer::Print("break");
-		auto breaker_types = op.children[0]->types;
-		auto breaker_estimated_cardinality = op.children[0]->estimated_cardinality;
-		auto breaker = make_uniq<PhysicalPipelineBreaker>(breaker_types, std::move(op.children[0]), breaker_estimated_cardinality);
-		op.children[0] = std::move(breaker);
 	}
 
 	// continue building the current pipeline on the LHS (probe side)
@@ -83,7 +70,6 @@ void PhysicalJoin::BuildJoinPipelines(Pipeline &current, MetaPipeline &meta_pipe
 	if (op.Cast<PhysicalJoin>().IsSource()) {
 		meta_pipeline.CreateChildPipeline(current, op, last_pipeline);
 	}
-	Printer::Print("end");
 }
 
 void PhysicalJoin::BuildPipelines(Pipeline &current, MetaPipeline &meta_pipeline) {
