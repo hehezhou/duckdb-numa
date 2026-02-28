@@ -120,7 +120,7 @@ MetaPipeline &MetaPipeline::CreateConcurrentChildMetaPipeline(Pipeline &current,
 	auto &child_meta_pipeline = *children.back().get();
 	// store the parent
 	child_meta_pipeline.parent = &current;
-	current.AddRuntimeDependency(child_meta_pipeline.GetBasePipeline());
+	// current.AddRuntimeDependency(child_meta_pipeline.GetBasePipeline());
 	equal_dependency_pairs.emplace_back(&current, child_meta_pipeline.GetBasePipeline().get());
 	all_pipelines.emplace_back(child_meta_pipeline.GetBasePipeline().get());
 	// child meta pipeline is part of the recursive CTE too

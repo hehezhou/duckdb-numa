@@ -147,6 +147,10 @@ TableScanOptions &CollectionScanState::GetOptions() {
 	return parent.options;
 }
 
+void CollectionScanState::AddVectorsSkipped(idx_t n) {
+	parent.AddVectorsSkipped(n);
+}
+
 ParallelCollectionScanState::ParallelCollectionScanState()
     : collection(nullptr), current_row_group(nullptr), processed_rows(0) {
 }

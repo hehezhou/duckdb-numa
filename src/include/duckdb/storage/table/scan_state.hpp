@@ -196,6 +196,8 @@ public:
 	bool Scan(DuckTransaction &transaction, DataChunk &result);
 	bool ScanCommitted(DataChunk &result, TableScanType type);
 	bool ScanCommitted(DataChunk &result, SegmentLock &l, TableScanType type);
+	//! Record vectors/chunks skipped (e.g. by zonemap) so pipeline executor can deduct from max_chunks
+	void AddVectorsSkipped(idx_t n);
 
 private:
 	TableScanState &parent;
@@ -230,6 +232,8 @@ public:
 	shared_ptr<CheckpointLock> checkpoint_lock;
 	//! Filter info
 	ScanFilterInfo filters;
+	//! Vectors/chunks skipped in this GetData call (zonemap, empty sel, etc.) for pipeline max_chunks alignment
+	idx_t vectors_skipped = 0;
 
 public:
 	void Initialize(vector<storage_t> column_ids, optional_ptr<TableFilterSet> table_filters = nullptr);
@@ -237,6 +241,10 @@ public:
 	const vector<storage_t> &GetColumnIds();
 
 	ScanFilterInfo &GetFilterInfo();
+
+	void AddVectorsSkipped(idx_t n) {
+		vectors_skipped += n;
+	}
 
 private:
 	//! The column identifiers of the scan

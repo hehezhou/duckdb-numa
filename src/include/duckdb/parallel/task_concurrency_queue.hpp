@@ -42,6 +42,7 @@ struct ConcurrentQueue {
 	void EnqueueNUMA(ProducerToken &token, TaskNUMA* task);
 	bool DequeueFromProducer(ProducerToken &token, shared_ptr<Task> &task);
 	DequeueResult Dequeue(shared_ptr<Task> &task, TaskNUMA* &task_numa, idx_t cpu_id);
+	DequeueResult DequeueWithoutWait(shared_ptr<Task> &task, TaskNUMA* &task_numa, idx_t cpu_id);
 	//! Must be called when holding latch.
 	bool TryFill(idx_t numa_id);
 	void SignAll(idx_t n);

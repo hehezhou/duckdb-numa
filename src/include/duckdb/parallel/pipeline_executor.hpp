@@ -53,6 +53,11 @@ public:
 
 	bool RemainingSinkChunk() const;
 
+	//! Vectors skipped in the last Execute(max_chunks) run (for feeding back to task rest_chunk)
+	idx_t GetLastVectorsSkipped() const {
+		return last_vectors_skipped;
+	}
+
 	//! Initializes a chunk with the types that will flow out of the chunk
 	void InitializeChunk(DataChunk &chunk);
 	//! Execute a pipeline without a sink, and retrieve a single DataChunk
@@ -107,6 +112,9 @@ private:
 	//! This flag is set when the pipeline gets interrupted by NextBatch -> NextBatch should be called again and the
 	//! source_chunk should be sent through the pipeline
 	bool next_batch_blocked = false;
+
+	//! Total vectors skipped in the last Execute(max_chunks) call (for task rest_chunk feedback)
+	idx_t last_vectors_skipped = 0;
 
 	//! Current operator being flushed
 	idx_t flushing_idx;

@@ -136,6 +136,11 @@ public:
 	//! Returns the current progress percentage, or a negative value if progress bars are not supported
 	virtual double GetProgress(ClientContext &context, GlobalSourceState &gstate) const;
 
+	//! Return and reset count of vectors skipped in last GetData (for pipeline max_chunks). Default 0.
+	virtual idx_t GetAndResetVectorsSkipped(LocalSourceState &lstate) const {
+		return 0;
+	}
+
 	//! Returns the current progress percentage, or a negative value if progress bars are not supported
 	virtual double GetSinkProgress(ClientContext &context, GlobalSinkState &gstate, double source_progress) const {
 		return source_progress;

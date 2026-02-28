@@ -131,6 +131,33 @@ void TaskScheduler::ExecuteForever(atomic<bool> *marker, idx_t cpu_id) {
 #endif
 }
 
+void TaskScheduler::WorkOnTasks() {
+	shared_ptr<Task> task;
+	TaskNUMA* task_numa;
+	while (true) {
+		auto execute_type = queue->DequeueWithoutWait(task, task_numa, 0);
+		if (execute_type == DequeueResult::NO_TASK) {
+			return;
+		}
+		if (execute_type == DequeueResult::TASK_NORMAL) {
+			auto execute_result = task->Execute(TaskExecutionMode::PROCESS_ALL);
+			switch (execute_result) {
+			case TaskExecutionResult::TASK_FINISHED:
+				task.reset();
+				break;
+			default:
+				throw NotImplementedException("Disallowed in Research TaskScheduler::WorkOnTasks");
+			}
+		} else if (execute_type == DequeueResult::TASK_NUMA_LOCAL) {
+			task_numa->Execute(TaskNUMAExecutionMode::PROCESS_LOCAL, 0);
+		} else if (execute_type == DequeueResult::TASK_NUMA_STEAL) {
+			task_numa->Execute(TaskNUMAExecutionMode::PROCESS_STEAL, 0);
+		} else {
+			abort();
+		}
+	}
+}
+
 idx_t TaskScheduler::ExecuteTasks(atomic<bool> *marker, idx_t max_tasks) {
 	throw NotImplementedException("Disallowed in Research TaskScheduler::ExecuteTasks(marker, max_tasks)");
 }

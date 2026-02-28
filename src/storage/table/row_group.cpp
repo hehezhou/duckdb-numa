@@ -458,6 +458,8 @@ bool RowGroup::CheckZonemapSegments(CollectionScanState &state) {
 			// exceedingly rare
 			return true;
 		}
+		idx_t vectors_to_skip = target_vector_index - state.vector_index;
+		state.AddVectorsSkipped(vectors_to_skip);
 		while (state.vector_index < target_vector_index) {
 			NextVector(state);
 		}
@@ -492,6 +494,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			count = state.row_group->GetSelVector(transaction, state.vector_index, state.valid_sel, max_count);
 			if (count == 0) {
 				// nothing to scan for this vector, skip the entire vector
+				state.AddVectorsSkipped(1);
 				NextVector(state);
 				continue;
 			}
@@ -500,6 +503,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 			                                               state.vector_index, state.valid_sel, max_count);
 			if (count == 0) {
 				// nothing to scan for this vector, skip the entire vector
+				state.AddVectorsSkipped(1);
 				NextVector(state);
 				continue;
 			}
@@ -585,6 +589,7 @@ void RowGroup::TemplatedScan(TransactionData transaction, CollectionScanState &s
 				D_ASSERT(has_filters);
 				result.Reset();
 				// skip this vector in all the scans that were not scanned yet
+				state.AddVectorsSkipped(1);
 				for (idx_t i = 0; i < column_ids.size(); i++) {
 					auto col_idx = column_ids[i];
 					if (col_idx == COLUMN_IDENTIFIER_ROW_ID) {

@@ -69,6 +69,11 @@ public:
 struct LocalTableFunctionState {
 	DUCKDB_API virtual ~LocalTableFunctionState();
 
+	//! Return and reset count of vectors skipped in last GetData (for pipeline max_chunks alignment). Default 0.
+	virtual idx_t GetAndResetVectorsSkipped() {
+		return 0;
+	}
+
 	template <class TARGET>
 	TARGET &Cast() {
 		DynamicCastCheck<TARGET>(this);

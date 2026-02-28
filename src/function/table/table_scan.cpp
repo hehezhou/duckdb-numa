@@ -32,6 +32,12 @@ struct TableScanLocalState : public LocalTableFunctionState {
 	TableScanState scan_state;
 	//! The DataChunk containing all read columns (even filter columns that are immediately removed)
 	DataChunk all_columns;
+
+	idx_t GetAndResetVectorsSkipped() override {
+		idx_t v = scan_state.vectors_skipped;
+		scan_state.vectors_skipped = 0;
+		return v;
+	}
 };
 
 static storage_t GetStorageIndex(TableCatalogEntry &table, column_t column_id) {
@@ -122,6 +128,7 @@ static void TableScanFunc(ClientContext &context, TableFunctionInput &data_p, Da
 	auto &transaction = DuckTransaction::Get(context, bind_data.table.catalog);
 	auto &storage = bind_data.table.GetStorage();
 
+	state.scan_state.vectors_skipped = 0;
 	state.scan_state.options.force_fetch_row = ClientConfig::GetConfig(context).force_fetch_row;
 	do {
 		if (bind_data.is_create_index) {

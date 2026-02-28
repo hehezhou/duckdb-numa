@@ -50,6 +50,8 @@ public:
 	//! Run tasks until `max_tasks` have been completed, or until there are no more tasks available
 	void ExecuteTasks(idx_t max_tasks);
 
+	void WorkOnTasks();
+
 	//! Sets the amount of background threads to be used for execution, based on the number of total threads
 	//! and the number of external threads. External threads, e.g. the main thread, will also be used for execution.
 	//! Launches `total_threads - external_threads` background worker threads.

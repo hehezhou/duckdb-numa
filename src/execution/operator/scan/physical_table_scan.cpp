@@ -76,6 +76,10 @@ public:
 		}
 	}
 
+	idx_t GetAndResetVectorsSkipped() {
+		return local_state ? local_state->GetAndResetVectorsSkipped() : 0;
+	}
+
 	unique_ptr<LocalTableFunctionState> local_state;
 };
 
@@ -109,6 +113,10 @@ SourceResultType PhysicalTableScan::GetData(ExecutionContext &context, DataChunk
 	}
 
 	return chunk.size() == 0 ? SourceResultType::FINISHED : SourceResultType::HAVE_MORE_OUTPUT;
+}
+
+idx_t PhysicalTableScan::GetAndResetVectorsSkipped(LocalSourceState &lstate) const {
+	return lstate.Cast<TableScanLocalSourceState>().GetAndResetVectorsSkipped();
 }
 
 double PhysicalTableScan::GetProgress(ClientContext &context, GlobalSourceState &gstate_p) const {

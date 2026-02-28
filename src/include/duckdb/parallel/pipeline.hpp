@@ -71,6 +71,8 @@ public:
 private:
 	void FinishExecutor(PipelineExecutor *executor);
 
+	void FinishChunks(idx_t num_chunk);
+
 private:
 	std::atomic<PipelineExecutor*> executors[thread_count];
 	std::atomic<idx_t> active_tasks{0};

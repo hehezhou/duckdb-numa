@@ -157,6 +157,9 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 				finish_tag = true;
 				break;
 			}
+			if (result == PipelineExecuteResult::NOT_FINISHED) {
+				FinishChunks(executor_ptr->GetLastVectorsSkipped());
+			}
 		} while (TryLocal() || input_finished);
 		break;
 	}
@@ -166,6 +169,7 @@ TaskExecutionResult PipelineTaskNUMA::Execute(TaskNUMAExecutionMode mode, idx_t 
 			delete executor_ptr;
 			finish_tag = true;
 		} else if (result == PipelineExecuteResult::NOT_FINISHED) {
+			FinishChunks(executor_ptr->GetLastVectorsSkipped());
 			if (StealCount(rest_chunk) != 0) {
 				schedule_queue.load()->AddSteal(numa_id, 1);
 			}
@@ -232,6 +236,20 @@ void PipelineTaskNUMA::AddChunks(idx_t num_chunks) {
 		queue->semaphore[numa_id].signal(num_chunks);
 		queue->AddSteal(numa_id, StealCount(chunks) - StealCount(chunks - num_chunks));
 	}
+}
+
+void PipelineTaskNUMA::FinishChunks(idx_t num_chunks) {
+	return;
+	if (num_chunks == 0) {
+		return;
+	}
+	auto chunks = rest_chunk.load(std::memory_order_relaxed);
+	do {
+		if (chunks == 0) {
+			return;
+		}
+	} while (!rest_chunk.compare_exchange_weak(chunks, chunks >= num_chunks ? chunks - num_chunks : 0, std::memory_order_relaxed));
+	return;
 }
 
 void PipelineTaskNUMA::FinishInput() {

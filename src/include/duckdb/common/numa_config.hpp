@@ -26,4 +26,4 @@ const int thread_count = 96;
 extern double numa_test_start;
 
 static constexpr const duckdb::idx_t STEAL_CHUNKS = 5;
-static constexpr const duckdb::idx_t LOCAL_AT_LEAST = 10;
+static constexpr const duckdb::idx_t LOCAL_AT_LEAST = 15;

@@ -167,6 +167,7 @@ SinkNextBatchType PipelineExecutor::NextBatch(duckdb::DataChunk &source_chunk) {
 
 PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 	D_ASSERT(pipeline.sink);
+	last_vectors_skipped = 0;
 	auto &source_chunk = pipeline.operators.empty() ? final_chunk : *intermediate_chunks[0];
 	while (true) {
 		if (context.client.interrupted) {
@@ -199,7 +200,7 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 		} else if (!exhausted_source || next_batch_blocked) {
 			SourceResultType source_result;
 			if (!next_batch_blocked) {
-				// "Regular" path: fetch a chunk from the source and push it through the pipeline				
+				// "Regular" path: fetch a chunk from the source and push it through the pipeline
 				if (max_chunks == 0) {
 					break;
 				}
@@ -212,6 +213,12 @@ PipelineExecuteResult PipelineExecutor::Execute(idx_t max_chunks) {
 				}
 				if (source_result == SourceResultType::FINISHED) {
 					exhausted_source = true;
+				}
+				// Deduct chunks skipped in scan (zonemap, empty sel, etc.) so max_chunks aligns with actual work
+				idx_t skipped = pipeline.source->GetAndResetVectorsSkipped(*local_source_state);
+				if (skipped > 0) {
+					last_vectors_skipped += skipped;
+					max_chunks -= MinValue(skipped, max_chunks);
 				}
 			}
 

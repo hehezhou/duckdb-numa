@@ -73,6 +73,8 @@ public:
 	}
 
 	double GetProgress(ClientContext &context, GlobalSourceState &gstate) const override;
+
+	idx_t GetAndResetVectorsSkipped(LocalSourceState &lstate) const override;
 };
 
 } // namespace duckdb

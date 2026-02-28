@@ -39,9 +39,8 @@ bool ConcurrentQueue::TryFill(idx_t numa_id) {
     return false;
 }
 
-DequeueResult ConcurrentQueue::Dequeue(shared_ptr<Task> &task, TaskNUMA* &task_numa, idx_t cpu_id) {
+DequeueResult ConcurrentQueue::DequeueWithoutWait(shared_ptr<Task> &task, TaskNUMA* &task_numa, idx_t cpu_id) {
     auto numa_id = cpu_id % 2;
-    semaphore[numa_id].wait();
     if (q.try_dequeue(task)) {
         return DequeueResult::TASK_NORMAL;
     }
@@ -54,6 +53,12 @@ DequeueResult ConcurrentQueue::Dequeue(shared_ptr<Task> &task, TaskNUMA* &task_n
         return DequeueResult::TASK_NUMA_STEAL;
     }
     return DequeueResult::NO_TASK;
+}
+
+DequeueResult ConcurrentQueue::Dequeue(shared_ptr<Task> &task, TaskNUMA* &task_numa, idx_t cpu_id) {
+    auto numa_id = cpu_id % 2;
+    semaphore[numa_id].wait();
+    return DequeueWithoutWait(task, task_numa, cpu_id);
 }
 
 bool ConcurrentQueue::DequeueFromProducer(ProducerToken &token, shared_ptr<Task> &task) {

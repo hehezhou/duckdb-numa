@@ -42,6 +42,7 @@ BuildProbeSideOptimizer::BuildProbeSideOptimizer(ClientContext &context, Logical
 	// cardinalities are the same, we prefer to have the child with the rowid bindings in the probe side.
 	GetRowidBindings(op, preferred_on_probe_side);
 	op.ResolveOperatorTypes();
+	swap_bitmask = swap_bitmask_start;
 }
 static void FlipChildren(LogicalOperator &op) {
 	std::swap(op.children[0], op.children[1]);
