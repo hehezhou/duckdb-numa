@@ -93,7 +93,11 @@ bool Pipeline::GetProgress(double &current_percentage, idx_t &source_cardinality
 void Pipeline::ScheduleSequentialTask(shared_ptr<Event> &event) {
 	vector<shared_ptr<Task>> tasks;
 	tasks.push_back(make_uniq<PipelineTask>(*this, event));
-	event->SetTasks(std::move(tasks));
+	// event->SetTasks(std::move(tasks));
+	auto result = tasks[0]->Execute(TaskExecutionMode::PROCESS_ALL);
+	if (result != TaskExecutionResult::TASK_FINISHED) {
+		throw InternalException("unsupported result");
+	}
 }
 
 bool Pipeline::ScheduleParallel(shared_ptr<Event> &event) {
