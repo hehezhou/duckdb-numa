@@ -308,7 +308,7 @@ OperatorResultType PipelineExecutor::ExecutePushInternal(DataChunk &input, idx_t
 
 			auto sink_result = Sink(sink_chunk, sink_input);
 
-			EndOperator(*pipeline.sink, nullptr);
+			EndOperator(*pipeline.sink, nullptr, true);
 
 			if (sink_result == SinkResultType::BLOCKED) {
 				return OperatorResultType::BLOCKED;
@@ -523,8 +523,8 @@ void PipelineExecutor::StartOperator(PhysicalOperator &op) {
 	context.thread.profiler.StartOperator(&op);
 }
 
-void PipelineExecutor::EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk) {
-	context.thread.profiler.EndOperator(chunk);
+void PipelineExecutor::EndOperator(PhysicalOperator &op, optional_ptr<DataChunk> chunk, bool is_sink) {
+	context.thread.profiler.EndOperator(chunk, is_sink);
 
 	if (chunk) {
 		chunk->Verify();

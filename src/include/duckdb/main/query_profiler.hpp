@@ -40,6 +40,7 @@ struct OperatorInformation {
 	}
 
 	double time;
+	double time_sink = 0;
 	idx_t elements_returned;
 	idx_t result_set_size;
 	idx_t data_width;
@@ -47,6 +48,10 @@ struct OperatorInformation {
 
 	void AddTime(double n_time) {
 		time += n_time;
+	}
+
+	void AddTimeSink(double n_time) {
+		time_sink += n_time;
 	}
 
 	void AddReturnedElements(idx_t n_elements) {
@@ -71,7 +76,7 @@ public:
 	DUCKDB_API explicit OperatorProfiler(ClientContext &context);
 
 	DUCKDB_API void StartOperator(optional_ptr<const PhysicalOperator> phys_op);
-	DUCKDB_API void EndOperator(optional_ptr<DataChunk> chunk);
+	DUCKDB_API void EndOperator(optional_ptr<DataChunk> chunk, bool is_sink = false);
 
 	//! Adds the timings in the OperatorProfiler (tree) to the QueryProfiler (tree).
 	DUCKDB_API void Flush(const PhysicalOperator &phys_op);

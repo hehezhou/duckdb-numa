@@ -332,7 +332,7 @@ void OperatorProfiler::StartOperator(optional_ptr<const PhysicalOperator> phys_o
 	}
 }
 
-void OperatorProfiler::EndOperator(optional_ptr<DataChunk> chunk) {
+void OperatorProfiler::EndOperator(optional_ptr<DataChunk> chunk, bool is_sink) {
 	if (!enabled) {
 		return;
 	}
@@ -349,6 +349,9 @@ void OperatorProfiler::EndOperator(optional_ptr<DataChunk> chunk) {
 		if (HasOperatorSetting(MetricsType::OPERATOR_TIMING)) {
 			op.End();
 			curr_operator_info.AddTime(op.Elapsed());
+			if (is_sink) {
+				curr_operator_info.AddTimeSink(op.Elapsed());
+			}
 		}
 		if (HasOperatorSetting(MetricsType::OPERATOR_CARDINALITY) && chunk) {
 			curr_operator_info.AddReturnedElements(chunk->size());
@@ -404,6 +407,7 @@ void QueryProfiler::Flush(OperatorProfiler &profiler) {
 
 		if (profiler.HasOperatorSetting(MetricsType::OPERATOR_TIMING)) {
 			tree_node.GetProfilingInfo().AddToMetric<double>(MetricsType::OPERATOR_TIMING, node.second.time);
+			tree_node.GetProfilingInfo().AddToMetric<double>(MetricsType::SINK_TIMING, node.second.time_sink);
 		}
 		if (profiler.HasOperatorSetting(MetricsType::OPERATOR_CARDINALITY)) {
 			tree_node.GetProfilingInfo().AddToMetric<idx_t>(MetricsType::OPERATOR_CARDINALITY,

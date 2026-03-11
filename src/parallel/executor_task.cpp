@@ -38,7 +38,7 @@ TaskExecutionResult ExecutorTask::Execute(TaskExecutionMode mode) {
 		if (thread_context) {
 			thread_context->profiler.StartOperator(op);
 			auto result = ExecuteTask(mode);
-			thread_context->profiler.EndOperator(nullptr);
+			thread_context->profiler.EndOperator(nullptr, true);
 			return result;
 		} else {
 			return ExecuteTask(mode);
